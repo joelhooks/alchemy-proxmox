@@ -57,7 +57,7 @@ pnpm check
 pnpm test
 ```
 
-Pure tests cover config parsing only. There are no mock servers. `pnpm check` runs Effect/TypeScript checking, oxfmt and type-aware oxlint with Ultracite core. The real lifecycle test skips loudly unless every target variable is present and `PROXMOX_LIVE=1` explicitly opts in:
+Offline tests cover config parsing and build the real Alchemy Node platform layer without credentials. The platform smoke test runs even when the PVE suite skips, so a missing Node platform peer fails locally. There are no mock servers. `pnpm check` runs Effect/TypeScript checking, oxfmt and type-aware oxlint with Ultracite core. The real lifecycle test skips loudly unless every target variable is present and `PROXMOX_LIVE=1` explicitly opts in:
 
 - Credentials: `PROXMOX_URL`, `PROXMOX_TOKEN_ID`, `PROXMOX_TOKEN_SECRET`.
 - Throwaway guest: `PROXMOX_NODE`, `PROXMOX_VMID`, `PROXMOX_POOL`, `PROXMOX_STORAGE`, `PROXMOX_TEMPLATE`, `PROXMOX_BRIDGE`.

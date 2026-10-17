@@ -57,8 +57,9 @@ This package pins Effect `4.0.5` in both peer and development dependencies. The 
 
 ### Gate evidence
 
-- Local gates passed: `pnpm install`; `pnpm check` (Effect/TypeScript, oxfmt, type-aware oxlint); `PROXMOX_LIVE=0 pnpm test` (4 parser tests passed, 1 real-PVE test explicitly skipped).
-- Follow-up live result: **pending owner run**. This worker does not have authorization to run the live PVE suite. Record the owner's result here after that run.
+- Local gates passed: `pnpm install`; `pnpm check` (Effect/TypeScript, oxfmt, type-aware oxlint); `PROXMOX_LIVE=0 pnpm test` (4 parser tests and 1 credential-free platform smoke test passed, 1 real-PVE test explicitly skipped).
+- The owner's live attempt on `a2b46bd` stopped before any PVE call because Alchemy could not load its optional Node platform peer. The follow-up adds exact `@effect/platform-node` `4.0.5` as a development dependency and an unconditional `test/platform.test.ts` that resolves NodeServices/NodeSocket, then builds Alchemy's actual PlatformServices layer. Resolving the modules first makes a missing peer fail normally instead of reaching Alchemy's `process.exit` fallback.
+- Follow-up live result: **pending owner rerun**. This worker does not have authorization to run the live PVE suite. Record the owner's result here after that run.
 
 ## Reference mirrors
 

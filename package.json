@@ -26,6 +26,7 @@
     "@distilled.cloud/proxmox": "npm:@homeflare/distilled-proxmox@0.3.5"
   },
   "devDependencies": {
+    "@effect/platform-node": "4.0.5",
     "@effect/tsgo": "0.45.0",
     "@effect/vitest": "4.0.1",
     "@types/node": "26.6.5",
