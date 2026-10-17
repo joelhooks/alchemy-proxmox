@@ -3,33 +3,40 @@
 import * as nodes from "@distilled.cloud/proxmox/nodes";
 import type { ProxmoxOpContext } from "@distilled.cloud/proxmox/Protocol";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { runPveWith } from "./distilled-pve.ts";
 import { Credentials } from "@distilled.cloud/proxmox/Credentials";
 import { QemuRefusedError } from "./qemu-errors.ts";
 import type { VmProps } from "./qemu.ts";
 import { text } from "./values.ts";
+
 export const qemuTask = <E>(
   props: VmProps,
   operation: Effect.Effect<string, E, ProxmoxOpContext>,
   what: string,
   polls: number,
 ) =>
-  Effect.gen(function* () {
+  Effect.gen(function* qemuTaskEffect() {
     const credential = yield* yield* Credentials;
     const upid = text(yield* runPveWith(credential, operation));
     if (upid === "") {
-      return yield* Effect.fail(
-        new QemuRefusedError(
-          `${what}: PVE returned no task id, so the write cannot be confirmed and is not claimed.`,
-        ),
+      yield* Effect.fail(
+        new QemuRefusedError({
+          keys: [],
+          node: props.node,
+          reasons: [
+            `${what}: PVE returned no task id, so the write cannot be confirmed and is not claimed.`,
+          ],
+          vmid: props.vmid,
+        }),
       );
     }
     let exit = "still running when this provider stopped waiting";
-    for (let attempt = 0; attempt < polls; attempt++) {
+    for (let attempt = 0; attempt < polls; attempt += 1) {
       const status = yield* runPveWith(
         credential,
         nodes.getNodeTaskStatus({ node: props.node, upid }),
-      ).pipe(Effect.orElseSucceed(() => undefined));
+      ).pipe(Effect.option, Effect.map(Option.getOrUndefined));
       if (status === undefined || status.status === undefined) {
         exit = "the task could not be read";
         break;
@@ -41,10 +48,15 @@ export const qemuTask = <E>(
       yield* Effect.sleep("1 second");
     }
     if (exit !== "OK") {
-      return yield* Effect.fail(
-        new QemuRefusedError(
-          `${what}: task ${upid} ended "${exit}". Read the task log before running the deploy again.`,
-        ),
+      yield* Effect.fail(
+        new QemuRefusedError({
+          keys: [],
+          node: props.node,
+          reasons: [
+            `${what}: task ${upid} ended "${exit}". Read the task log before running the deploy again.`,
+          ],
+          vmid: props.vmid,
+        }),
       );
     }
   });

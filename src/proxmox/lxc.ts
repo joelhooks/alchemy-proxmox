@@ -1,189 +1,170 @@
 // Ported from homeflare-kit (@homeflare/alchemy 0.55.0), src/proxmox/lxc.ts.
 // MIT — Timothy Schneider. See LICENSE-homeflare-kit and PROVENANCE.md.
 import { Resource } from "alchemy";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
-import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
-import { type Owner, refuseTakeover } from "../ownership/adopt.ts";
-import { ownedRead } from "../ownership/probe.ts";
-import { provingResumes } from "../ownership/resume.ts";
-import { createRefusals, createForm } from "./lxc-create-form.ts";
-import { guardForm } from "./constraint-guard.ts";
+import { createForm, createRefusals } from "./lxc-create-form.ts";
+import { LxcRefusedError } from "./lxc-errors.ts";
 import { identityRefusals } from "./lxc-identity.ts";
-import { refuseAdoptedDrift } from "./lxc-adoption.ts";
 import { judge } from "./lxc-judge.ts";
-import {
-  LxcRefusedError,
-  type LxcWhere,
-  attributesOf,
-  createGuest,
-  destroyGuest,
-  readLive,
-  updateGuest,
-} from "./lxc-lifecycle.ts";
+import { attributesOf, createGuest, destroyGuest, readLive, updateGuest } from "./lxc-lifecycle.ts";
 import type { LxcAttributes, LxcProps } from "./lxc-props.ts";
 import type { PveRequirements } from "./resource.ts";
+import { guardForm } from "./constraint-guard.ts";
+import { requireRecreation } from "./missing-guest.ts";
+import { hasTag, requireOwnership, withTag } from "./ownership.ts";
 import { text } from "./values.ts";
+import { taggedGuests } from "./discovery.ts";
+
 export type { LxcAttributes, LxcProps } from "./lxc-props.ts";
-export interface Lxc extends Resource<
-  "Proxmox.Lxc",
-  LxcProps,
-  LxcAttributes,
-  never,
-  PveRequirements
-> {}
-export const Lxc = Resource<Lxc>("Proxmox.Lxc", {
-  defaultRemovalPolicy: "retain",
+
+// oxlint-disable-next-line no-redeclare -- Alchemy resources intentionally share a name in TypeScript's type and value namespaces.
+export type Lxc = Resource<"Proxmox.Lxc", LxcProps, LxcAttributes, never, PveRequirements>;
+export const Lxc = Resource<Lxc>("Proxmox.Lxc", { defaultRemovalPolicy: "retain" });
+
+const refuse = (props: LxcProps, reasons: readonly string[], keys: readonly string[] = []) =>
+  Effect.fail(new LxcRefusedError({ keys, node: props.node, reasons, vmid: props.vmid }));
+const effective = (props: LxcProps, fqn: string, live: Record<string, unknown>): LxcProps =>
+  hasTag(fqn, text(live.tags))
+    ? withTag({ ...props, tags: props.tags ?? text(live.tags) }, fqn)
+    : props;
+const createGuard = Effect.fn(function* createGuardEffect(props: LxcProps) {
+  const reasons = createRefusals(props);
+  if (reasons.length > 0) {
+    yield* refuse(props, reasons);
+  }
+  yield* guardForm("pve:POST /nodes/{node}/lxc", createForm(props), true);
 });
-type LxcOwner = Owner & {
-  readonly output: LxcAttributes | undefined;
-};
-const refused = (reasons: readonly string[]) =>
-  Effect.fail(new LxcRefusedError(reasons.join("\n")));
-const diff = (owner: LxcOwner, news: Input<LxcProps>, olds: LxcProps) =>
-  Effect.gen(function* () {
-    const { output } = owner;
-    const identity = identityRefusals(news, olds, output);
-    if (identity.length > 0) return yield* refused(identity);
-    if (output === undefined) return undefined;
-    if (!isResolved(news)) return undefined;
-    const live = yield* readLive(news);
-    if (live === undefined) {
-      const refusals = createRefusals(news);
-      if (refusals.length > 0) return yield* refused(refusals);
-      yield* Effect.logWarning(
-        `Proxmox.Lxc ${news.node}/${String(news.vmid)}: the cluster lists no guest with this ` +
-          "vmid -- a deploy CREATES it again from ostemplate, with new, empty volumes.",
-      );
-      return { action: "update" } as const;
-    }
-    const change = judge(news, live);
-    yield* refuseAdoptedDrift(owner, news, live, change);
-    if (change.refuse.length > 0) return yield* refused(change.refuse);
-    if (change.drift.length === 0) return { action: "noop" } as const;
-    const what = `live config differs in ${change.drift.join(", ")} -- deploy writes these keys.`;
-    yield* Effect.logWarning(
-      `Proxmox.Lxc ${news.node}/${String(news.vmid)}: ${what}`,
+const checkAdoption = Effect.fn(function* checkAdoptionEffect(
+  props: LxcProps,
+  live: Record<string, unknown>,
+) {
+  const change = judge(props, live);
+  if (change.drift.length > 0) {
+    yield* refuse(
+      props,
+      ["Adoption differs in the named keys; adoption never writes."],
+      change.drift,
     );
-    return { action: "update" } as const;
-  });
-const reconcile = (owner: LxcOwner, news: LxcProps, olds?: LxcProps) =>
-  Effect.gen(function* () {
-    const { output } = owner;
-    const identity = identityRefusals(news, olds ?? news, output);
-    if (identity.length > 0) return yield* refused(identity);
-    const live = yield* readLive(news);
-    if (live === undefined) {
-      const refusals = createRefusals(news);
-      if (refusals.length > 0) return yield* refused(refusals);
-      yield* createGuest(news);
-    } else {
-      if (output === undefined) {
-        yield* refuseTakeover(
-          owner,
-          `Proxmox.Lxc CT ${String(news.vmid)} on ${news.node}`,
+  }
+});
+
+export const LxcProvider = () =>
+  Provider.succeed(Lxc, {
+    delete: Effect.fn(function* deleteGuestEffect({ fqn, olds, output }) {
+      const where = { ...olds, node: output.node, vmid: output.vmid };
+      const live = yield* readLive(where);
+      if (live === undefined) {
+        return;
+      }
+      yield* destroyGuest(where, effective(olds, fqn, live));
+    }),
+    diff: Effect.fn(function* diffEffect({ fqn, news, olds, output }) {
+      const identity = identityRefusals(news, olds, output);
+      if (identity.length > 0) {
+        yield* refuse(
+          olds,
+          identity.map(({ reason }) => reason),
+          identity.map(({ key }) => key),
         );
       }
-      const change = judge(news, live);
-      if (output === undefined && change.drift.length > 0) {
-        return yield* refused([
-          `CT ${String(news.vmid)} already exists on ${news.node} and differs in ` +
-            `${change.drift.join(", ")}, but this deploy planned a create. A create never writes ` +
-            "onto an existing guest: plan again, so the plan can show it and adopt it.",
-        ]);
+      if (!isResolved(news)) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Alchemy optional read/diff results are explicitly undefined, not void.
+        return undefined;
       }
-      yield* refuseAdoptedDrift(owner, news, live, change);
-      if (change.refuse.length > 0) return yield* refused(change.refuse);
-      if (change.drift.length > 0)
-        yield* updateGuest(news, change, text(live["digest"]));
-    }
-    const after = yield* readLive(news);
-    if (after === undefined) {
-      return yield* refused([
-        `CT ${String(news.vmid)}: the write returned no error but the guest is still absent.`,
-      ]);
-    }
-    const left = judge(news, after).drift;
-    if (left.length > 0) {
-      return yield* refused([
-        `CT ${String(news.vmid)}: after the write, ${left.join(", ")} still differ from the ` +
-          "declaration. PVE may have normalised the value (tags are lower-cased by default) -- " +
-          "declare what it stores.",
-      ]);
-    }
-    return attributesOf(news, after);
+      const live = yield* readLive(news);
+      if (live === undefined) {
+        yield* requireRecreation(news);
+        yield* createGuard(news);
+        return { action: "update" } as const;
+      }
+      const change = judge(effective(news, fqn, live), live);
+      if (change.refuse.length > 0) {
+        yield* refuse(news, change.refuse, change.drift);
+      }
+      return { action: change.drift.length === 0 ? "noop" : "update" } as const;
+    }),
+    list: Effect.fn(function* listEffect() {
+      const guests = yield* taggedGuests("lxc");
+      const found = yield* Effect.all(
+        guests.map((guest) =>
+          Effect.gen(function* readListedEffect() {
+            const config = yield* readLive(guest);
+            return config === undefined ? undefined : attributesOf(guest, config);
+          }),
+        ),
+      );
+      return found.filter((guest) => guest !== undefined);
+    }),
+    read: Effect.fn(function* readEffect({ fqn, olds, output }) {
+      const where = { ...olds, node: output?.node ?? olds.node, vmid: output?.vmid ?? olds.vmid };
+      const live = yield* readLive(where);
+      if (live === undefined) {
+        if (output !== undefined) {
+          yield* requireRecreation(olds);
+        }
+        yield* createGuard(olds);
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Alchemy optional read/diff results are explicitly undefined, not void.
+        return undefined;
+      }
+      const declared = effective(olds, fqn, live);
+      const tagged = hasTag(fqn, text(live.tags));
+      if (output === undefined && !tagged) {
+        yield* checkAdoption(declared, live);
+      }
+      const attrs = attributesOf(where, live);
+      return output !== undefined || tagged ? attrs : Unowned(attrs);
+    }),
+    reconcile: Effect.fn(function* reconcileEffect({ fqn, news, olds, output }) {
+      const identity = identityRefusals(news, olds ?? news, output);
+      if (identity.length > 0) {
+        yield* refuse(
+          news,
+          identity.map(({ reason }) => reason),
+          identity.map(({ key }) => key),
+        );
+      }
+      const live = yield* readLive(news);
+      let declared = news;
+      if (live === undefined) {
+        if (output !== undefined || olds !== undefined) {
+          yield* requireRecreation(news);
+        }
+        declared = withTag(news, fqn);
+        yield* createGuard(declared);
+        yield* createGuest(declared);
+      } else {
+        const tagged = hasTag(fqn, text(live.tags));
+        yield* requireOwnership(fqn, "Proxmox.Lxc", output !== undefined || tagged);
+        declared = effective(news, fqn, live);
+        const change = judge(declared, live);
+        // beta.83 passes no old props on adoption, even though it supplies the observed attributes.
+        if (output === undefined || olds === undefined) {
+          yield* checkAdoption(declared, live);
+        }
+        if (change.refuse.length > 0) {
+          yield* refuse(news, change.refuse, change.drift);
+        }
+        if (change.drift.length > 0) {
+          yield* updateGuest(declared, change, text(live.digest));
+        }
+      }
+      const after = yield* readLive(news);
+      if (after === undefined) {
+        return yield* refuse(news, ["The write returned success but the guest is still absent."]);
+      }
+      const left = judge(declared, after).drift;
+      if (left.length > 0) {
+        yield* refuse(
+          news,
+          ["After the write the named keys still differ; declare the config PVE stores."],
+          left,
+        );
+      }
+      return attributesOf(news, after);
+    }),
+    // Only top-level identity outputs are stable; nested immutable config is checked by diff.
+    stables: ["node", "vmid"],
   });
-const whereOf = (
-  olds: LxcProps,
-  output: LxcAttributes | undefined,
-): LxcWhere => ({
-  node: output?.node ?? olds.node,
-  pool: olds.pool,
-  vmid: output?.vmid ?? olds.vmid,
-});
-const read = (owner: LxcOwner, olds: LxcProps) =>
-  Effect.gen(function* () {
-    const where = whereOf(olds, owner.output);
-    const live = yield* readLive(where);
-    if (live === undefined) {
-      const reasons = createRefusals(olds);
-      if (reasons.length > 0) return yield* refused(reasons);
-      yield* guardForm("pve:POST /nodes/{node}/lxc", createForm(olds), true);
-      return undefined;
-    }
-    // The adoption probe must reject drift before Alchemy can record this guest as owned.
-    const change = judge(olds, live);
-    if (owner.output === undefined && change.drift.length > 0) {
-      return yield* refused([
-        `Adoption differs in ${change.drift.join(", ")}. Declare the live config; adoption never writes.`,
-      ]);
-    }
-    const settled = Effect.sync(() => judge(olds, live).drift.length === 0);
-    return yield* ownedRead(owner, attributesOf(where, live), settled);
-  });
-type Asked = {
-  readonly fqn: string;
-  readonly instanceId: string;
-};
-const handlers = {
-  delete: ({ olds, output }: { olds: LxcProps; output: LxcAttributes }) =>
-    destroyGuest(whereOf(olds, output), olds),
-  diff: ({
-    fqn,
-    instanceId,
-    news,
-    olds,
-    output,
-  }: Asked & {
-    news: Input<LxcProps>;
-    olds: LxcProps;
-    output: LxcAttributes | undefined;
-  }) => diff({ fqn, instanceId, output }, news, olds),
-  list: () => Effect.succeed([]),
-  read: ({
-    fqn,
-    instanceId,
-    olds,
-    output,
-  }: Asked & {
-    olds: LxcProps;
-    output: LxcAttributes | undefined;
-  }) => read({ fqn, instanceId, output }, olds),
-  reconcile: ({
-    fqn,
-    instanceId,
-    news,
-    olds,
-    output,
-  }: Asked & {
-    news: LxcProps;
-    olds: LxcProps | undefined;
-    output: LxcAttributes | undefined;
-  }) => reconcile({ fqn, instanceId, output }, news, olds),
-};
-export const LxcProvider = () =>
-  Provider.effect(
-    Lxc,
-    Effect.succeed(Lxc.Provider.of(handlers)).pipe(Effect.map(provingResumes)),
-  );

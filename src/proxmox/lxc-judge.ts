@@ -1,13 +1,7 @@
 // Ported from homeflare-kit (@homeflare/alchemy 0.55.0), src/proxmox/lxc-judge.ts.
 // MIT — Timothy Schneider. See LICENSE-homeflare-kit and PROVENANCE.md.
-import {
-  type LxcProps,
-  declaredKeys,
-  declaredValue,
-  indexedKey,
-  isManagedKey,
-  wireValue,
-} from "./lxc-props.ts";
+import { declaredKeys, declaredValue, indexedKey, isManagedKey, wireValue } from "./lxc-props.ts";
+import type { LxcProps } from "./lxc-props.ts";
 import { isHostPath, judgeVolume, parseVolume } from "./lxc-volume.ts";
 import {
   CLEARABLE,
@@ -21,7 +15,8 @@ import {
   sortedForm,
 } from "./lxc-wire.ts";
 import { bool, canonicalToken } from "./values.ts";
-export type LxcChange = {
+
+export interface LxcChange {
   readonly put: Record<string, string>;
   readonly clear: readonly string[];
   readonly resize: readonly {
@@ -30,49 +25,42 @@ export type LxcChange = {
   }[];
   readonly refuse: readonly string[];
   readonly drift: readonly string[];
-};
+}
 const text = (value: unknown): string | undefined =>
   value === undefined || value === null ? undefined : wireValue(value);
-export const rootOnly = (
-  vmid: number,
-  key: string,
-  value: string,
-  why: string,
-): string =>
+export const rootOnly = (vmid: number, key: string, value: string, why: string): string =>
   `${key}: ${why} PVE lets only root@pam write it, and an API token is never root@pam. Run ` +
   `\`pct set ${String(vmid)} ${value === "" ? `--delete ${key}` : `--${key} '${value}'`}\` ` +
   "on the node, then plan again.";
 const rawFeatures = (value: string) =>
   new Map(
-    pairs(value).map(([key, entry]) => [
-      key,
-      key === "mount" ? entry : canonicalToken(entry),
-    ]),
+    pairs(value).map(([key, entry]) => [key, key === "mount" ? entry : canonicalToken(entry)]),
   );
 export const featuresNeedRoot = (
   live: string,
   sent: string | undefined,
   unprivileged: boolean,
 ): boolean => {
-  if (!unprivileged) return true;
+  if (!unprivileged) {
+    return true;
+  }
   const have = rawFeatures(live);
-  if (sent === undefined)
+  if (sent === undefined) {
     return !(have.size === 0 || (have.size === 1 && have.has("nesting")));
+  }
   const want = rawFeatures(sent);
   const keys = new Set([...have.keys(), ...want.keys()]);
   return [...keys].some(
-    (key) =>
-      key !== "nesting" && (have.get(key) ?? "") !== (want.get(key) ?? ""),
+    (key) => key !== "nesting" && (have.get(key) ?? "") !== (want.get(key) ?? ""),
   );
 };
 export const featureWhy = (unprivileged: boolean): string =>
-  unprivileged
-    ? "A feature other than nesting."
-    : "Any feature on a privileged guest.";
-export const judge = (
-  props: LxcProps,
-  live: Record<string, unknown>,
-): LxcChange => {
+  unprivileged ? "A feature other than nesting." : "Any feature on a privileged guest.";
+const devSame = (want: string, have: string) =>
+  sortedForm(optionMap(want, "dev", "path")) === sortedForm(optionMap(have, "dev", "path"));
+
+// oxlint-disable-next-line complexity -- Preserve the ported per-key LXC decision matrix instead of splitting its shared change accumulator.
+export const judge = (props: LxcProps, live: Record<string, unknown>): LxcChange => {
   const put: Record<string, string> = {};
   const clear: string[] = [];
   const resize: {
@@ -81,7 +69,7 @@ export const judge = (
   }[] = [];
   const refuse: string[] = [];
   const drift = new Set<string>();
-  const unprivileged = bool(live["unprivileged"], false);
+  const unprivileged = bool(live.unprivileged, false);
   for (const key of declaredKeys(props)) {
     const want = wireValue(declaredValue(props, key));
     const have = text(live[key]);
@@ -98,7 +86,9 @@ export const judge = (
     }
     if (key === "rootfs" || indexed?.[0] === "mp") {
       if (want === "") {
-        if (have === undefined) continue;
+        if (have === undefined) {
+          continue;
+        }
         drift.add(key);
         refuse.push(
           `${key}: detaching a mount point moves its volume to unusedN -- do it by hand.`,
@@ -106,30 +96,32 @@ export const judge = (
       } else if (have === undefined) {
         drift.add(key);
         if (isHostPath(parseVolume(want))) {
-          refuse.push(
-            rootOnly(props.vmid, key, want, "A bind or device mount point."),
-          );
-        } else put[key] = want;
+          refuse.push(rootOnly(props.vmid, key, want, "A bind or device mount point."));
+        } else {
+          put[key] = want;
+        }
       } else {
         const verdict = judgeVolume(key, want, have);
-        if (verdict.refuse !== undefined) refuse.push(verdict.refuse);
-        if (verdict.rootOnly === true) {
-          refuse.push(
-            rootOnly(props.vmid, key, want, "A bind or device mount point."),
-          );
+        if (verdict.refuse !== undefined) {
+          refuse.push(verdict.refuse);
         }
-        if (verdict.put !== undefined) put[key] = verdict.put;
-        if (verdict.resize !== undefined)
+        if (verdict.rootOnly === true) {
+          refuse.push(rootOnly(props.vmid, key, want, "A bind or device mount point."));
+        }
+        if (verdict.put !== undefined) {
+          put[key] = verdict.put;
+        }
+        if (verdict.resize !== undefined) {
           resize.push({ disk: key, size: verdict.resize });
-        if (Object.keys(verdict).length > 0) drift.add(key);
+        }
+        if (Object.keys(verdict).length > 0) {
+          drift.add(key);
+        }
       }
       continue;
     }
     if (indexed?.[0] === "dev") {
-      const same =
-        want === ""
-          ? have === undefined
-          : have !== undefined && devSame(want, have);
+      const same = want === "" ? have === undefined : have !== undefined && devSame(want, have);
       if (!same) {
         drift.add(key);
         refuse.push(rootOnly(props.vmid, key, want, "Device passthrough."));
@@ -162,24 +154,20 @@ export const judge = (
     const wanted = want === "" ? "" : scalarForm(key, want);
     const current = have ?? SCALAR_DEFAULTS[key];
     const had = current === undefined ? "" : scalarForm(key, current);
-    if (wanted === had) continue;
+    if (wanted === had) {
+      continue;
+    }
     drift.add(key);
     const next = key === "features" ? wanted : want;
-    if (
-      key === "features" &&
-      featuresNeedRoot(have ?? "", next || undefined, unprivileged)
-    ) {
+    if (key === "features" && featuresNeedRoot(have ?? "", next || undefined, unprivileged)) {
       refuse.push(rootOnly(props.vmid, key, want, featureWhy(unprivileged)));
     } else if (next === "" && CLEARABLE.has(key)) {
       clear.push(key);
     } else if (next === "") {
-      refuse.push(
-        `${key}: cannot be removed; declare the value it should have.`,
-      );
-    } else put[key] = next;
+      refuse.push(`${key}: cannot be removed; declare the value it should have.`);
+    } else {
+      put[key] = next;
+    }
   }
-  return { clear, drift: [...drift].sort(), put, refuse, resize };
+  return { clear, drift: [...drift].toSorted(), put, refuse, resize };
 };
-const devSame = (want: string, have: string) =>
-  sortedForm(optionMap(want, "dev", "path")) ===
-  sortedForm(optionMap(have, "dev", "path"));

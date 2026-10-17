@@ -1,13 +1,9 @@
 // Ported from homeflare-kit (@homeflare/alchemy 0.55.0), src/proxmox/qemu-form.ts.
 // MIT — Timothy Schneider. See LICENSE-homeflare-kit and PROVENANCE.md.
-import {
-  type VmProps,
-  declaredKeys,
-  declaredValue,
-  isManagedKey,
-  wireValue,
-} from "./qemu-props.ts";
+import { declaredKeys, declaredValue, isManagedKey, wireValue } from "./qemu-props.ts";
+import type { VmProps } from "./qemu-props.ts";
 import { dnsRefusals } from "./qemu-dns.ts";
+
 export const formRefusals = (props: VmProps): string[] => [
   ...declaredKeys(props)
     .filter((key) => !isManagedKey(key))
@@ -20,7 +16,9 @@ export const formRefusals = (props: VmProps): string[] => [
 export const form = (props: VmProps): Record<string, string> => {
   const out: Record<string, string> = {};
   for (const key of declaredKeys(props)) {
-    if (!isManagedKey(key)) continue;
+    if (!isManagedKey(key)) {
+      continue;
+    }
     out[key] = wireValue(declaredValue(props, key));
   }
   return out;

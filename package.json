@@ -1,10 +1,8 @@
 {
   "name": "alchemy-proxmox",
   "version": "0.0.0",
-  "exports": {
-    ".": "./src/index.ts",
-    "./Credentials": "./src/Credentials.ts"
-  },
+  "description": "Proxmox VE resources for Alchemy",
+  "license": "MIT",
   "files": [
     "src",
     "README.md",
@@ -12,33 +10,40 @@
     "LICENSE",
     "LICENSE-homeflare-kit"
   ],
-  "description": "Proxmox VE resources for Alchemy",
-  "license": "MIT",
   "type": "module",
-  "packageManager": "pnpm@11.3.0",
-  "engines": {
-    "node": ">=24.18.0"
+  "exports": {
+    ".": "./src/index.ts",
+    "./Credentials": "./src/credentials.ts"
   },
   "scripts": {
     "vendor:agent-sources": "bash scripts/vendor-agent-sources.sh",
-    "typecheck": "tsc --noEmit",
-    "format": "prettier --write src test package.json tsconfig.json vitest.config.ts README.md PROVENANCE.md pnpm-workspace.yaml",
-    "check": "pnpm typecheck && prettier --check src test package.json tsconfig.json vitest.config.ts README.md PROVENANCE.md pnpm-workspace.yaml",
+    "typecheck": "effect-tsgo patch && tsc --noEmit -p tsconfig.json",
+    "format": "oxfmt --write src test *.ts *.json AGENTS.md README.md PROVENANCE.md pnpm-workspace.yaml",
+    "check": "pnpm typecheck && oxfmt --check src test *.ts *.json AGENTS.md README.md PROVENANCE.md pnpm-workspace.yaml && oxlint --type-aware",
     "test": "ALCHEMY_TELEMETRY_DISABLED=1 vitest run"
   },
   "dependencies": {
     "@distilled.cloud/proxmox": "npm:@homeflare/distilled-proxmox@0.3.5"
   },
-  "peerDependencies": {
-    "alchemy": "2.0.0-beta.83",
-    "effect": "4.0.1"
-  },
   "devDependencies": {
+    "@effect/tsgo": "0.45.0",
+    "@effect/vitest": "4.0.1",
     "@types/node": "26.6.5",
     "alchemy": "2.0.0-beta.83",
-    "effect": "4.0.1",
-    "prettier": "3.9.10",
-    "typescript": "5.9.3",
+    "effect": "4.0.5",
+    "oxfmt": "0.68.0",
+    "oxlint": "1.83.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "7.0.2",
+    "ultracite": "7.12.0",
     "vitest": "5.0.5"
-  }
+  },
+  "peerDependencies": {
+    "alchemy": "2.0.0-beta.83",
+    "effect": "4.0.5"
+  },
+  "engines": {
+    "node": ">=24.18.0"
+  },
+  "packageManager": "pnpm@11.3.0"
 }

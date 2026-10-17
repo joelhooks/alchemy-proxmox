@@ -20,28 +20,25 @@ describe("PVE config wire parsing", () => {
   });
   it("normalizes flags and unordered LXC network subproperties", () => {
     expect(scalarForm("onboot", "true")).toBe(scalarForm("onboot", "1"));
+    expect(scalarForm("tags", "UserB;usera;USERB")).toBe("usera;userb");
     const { want, have } = netMaps("name=eth0,ip=dhcp", "ip=dhcp,name=eth0");
     expect(sameMap(want, have)).toBe(true);
   });
   it("reads QEMU imports, options, and wire sizes", () => {
-    expect(
-      parseDisk("storage:0,import-from=source:image,discard=on").kind,
-    ).toBe("fresh");
-    expect(
-      parseDisk("storage:volume,size=2G,discard=on").options.get("discard"),
-    ).toBe("on");
+    expect(parseDisk("storage:0,import-from=source:image,discard=on").kind).toBe("fresh");
+    expect(parseDisk("storage:volume,size=2G,discard=on").options.get("discard")).toBe("on");
     expect(diskBytes("storage:volume,size=2048M")).toBe(2 * 1024 ** 3);
     expect(diskBytes("storage:volume")).toBeUndefined();
   });
   it("stores only managed config fields and canonical scalar wire values", () => {
     expect(
       storedConfig({
+        digest: "opaque",
+        future: "unknown",
+        lock: "create",
         memory: 512,
         onboot: true,
-        digest: "opaque",
         password: "excluded",
-        lock: "create",
-        future: "unknown",
       }),
     ).toEqual({ memory: "512", onboot: "1" });
   });

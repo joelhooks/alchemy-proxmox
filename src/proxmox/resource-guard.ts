@@ -7,8 +7,4 @@ import type { VmProps } from "./qemu-props.ts";
 export const guardCreate = (props: VmProps, presence: boolean) =>
   guardForm("pve:POST /nodes/{node}/qemu", createForm(props), presence);
 export const guardUpdate = (props: VmProps) =>
-  guardForm(
-    "pve:PUT /nodes/{node}/qemu/{vmid}/config",
-    updateForm(props),
-    false,
-  );
+  guardForm("pve:PUT /nodes/{node}/qemu/{vmid}/config", updateForm(props), false);

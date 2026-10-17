@@ -1,6 +1,7 @@
 // Ported from homeflare-kit (@homeflare/alchemy 0.55.0), src/proxmox/lxc-wire.ts.
 // MIT — Timothy Schneider. See LICENSE-homeflare-kit and PROVENANCE.md.
 import { canonicalToken, propertyString } from "./values.ts";
+
 export const pairs = (value: string, defaultKey?: string): [string, string][] =>
   value
     .split(",")
@@ -8,8 +9,9 @@ export const pairs = (value: string, defaultKey?: string): [string, string][] =>
     .filter((part) => part !== "")
     .map((part): [string, string] => {
       const at = part.indexOf("=");
-      if (at === -1)
+      if (at === -1) {
         return [defaultKey ?? part, defaultKey === undefined ? "" : part];
+      }
       return [part.slice(0, at).trim(), part.slice(at + 1).trim()];
     });
 const DEFAULTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
@@ -51,12 +53,15 @@ const FLAGS = new Set([
 ]);
 const SETS = new Set(["mount", "mountoptions"]);
 const canonicalValue = (key: string, value: string) => {
-  if (FLAGS.has(key)) return canonicalToken(value);
-  if (SETS.has(key))
-    return [...new Set(value.split(";").map((part) => part.trim()))]
-      .sort()
-      .join(";");
-  if (key === "hwaddr") return value.toUpperCase();
+  if (FLAGS.has(key)) {
+    return canonicalToken(value);
+  }
+  if (SETS.has(key)) {
+    return [...new Set(value.split(";").map((part) => part.trim()))].toSorted().join(";");
+  }
+  if (key === "hwaddr") {
+    return value.toUpperCase();
+  }
   return value;
 };
 export const optionMap = (
@@ -68,58 +73,57 @@ export const optionMap = (
   const out = new Map<string, string>();
   for (const [key, raw] of pairs(value, defaultKey)) {
     const canonical = canonicalValue(key, raw);
-    if (defaults[key] !== canonical) out.set(key, canonical);
+    if (defaults[key] !== canonical) {
+      out.set(key, canonical);
+    }
   }
   return out;
 };
-export const sameMap = (
-  left: Map<string, string>,
-  right: Map<string, string>,
-) =>
-  left.size === right.size &&
-  [...left].every(([key, value]) => right.get(key) === value);
+export const sameMap = (left: Map<string, string>, right: Map<string, string>) =>
+  left.size === right.size && [...left].every(([key, value]) => right.get(key) === value);
 export const sortedForm = (map: Map<string, string>) =>
   [...map]
     .map(([key, value]) => `${key}=${value}`)
-    .sort()
+    .toSorted()
     .join(",");
-export const printMap = (
-  map: Map<string, string>,
-  lead: readonly string[] = [],
-) =>
-  [
-    ...lead.filter((key) => map.has(key)),
-    ...[...map.keys()].filter((k) => !lead.includes(k)),
-  ]
+export const printMap = (map: Map<string, string>, lead: readonly string[] = []) =>
+  [...lead.filter((key) => map.has(key)), ...[...map.keys()].filter((k) => !lead.includes(k))]
     .map((key) => `${key}=${map.get(key) ?? ""}`)
     .join(",");
 export const netMaps = (declared: string, live: string) => {
   const want = optionMap(declared, "net");
   const have = optionMap(live, "net");
-  if (!want.has("hwaddr")) have.delete("hwaddr");
+  if (!want.has("hwaddr")) {
+    have.delete("hwaddr");
+  }
   return { have, want };
 };
 export const netWrite = (declared: string, live: string | undefined) => {
   const want = new Map(pairs(declared));
-  const mac =
-    live === undefined ? undefined : new Map(pairs(live)).get("hwaddr");
-  if (!want.has("hwaddr") && mac !== undefined) want.set("hwaddr", mac);
+  const mac = live === undefined ? undefined : new Map(pairs(live)).get("hwaddr");
+  if (!want.has("hwaddr") && mac !== undefined) {
+    want.set("hwaddr", mac);
+  }
   return printMap(want, ["name"]);
 };
 export const tagSet = (value: string) =>
-  [...new Set(value.split(/[;,\s]+/).filter((tag) => tag !== ""))]
-    .map((tag) => tag.toLowerCase())
-    .sort()
+  [
+    ...new Set(
+      value
+        .split(/[;,\s]+/u)
+        .filter((tag) => tag !== "")
+        .map((tag) => tag.toLowerCase()),
+    ),
+  ]
+    .toSorted()
     .join(";");
 export const orderedList = (value: string) =>
   value
-    .split(/[;,\s]+/)
+    .split(/[;,\s]+/u)
     .filter((part) => part !== "")
     .join(" ");
-export const descriptionText = (value: string) => value.replace(/\s+$/, "");
-export const SCALAR_KINDS: Readonly<
-  Record<string, "text" | "number" | "flag" | "form">
-> = {
+export const descriptionText = (value: string) => value.replace(/\s+$/u, "");
+export const SCALAR_KINDS: Readonly<Record<string, "text" | "number" | "flag" | "form">> = {
   arch: "text",
   cmode: "text",
   console: "flag",
@@ -163,12 +167,26 @@ export const SCALAR_DEFAULTS: Readonly<Record<string, string>> = {
 };
 export const scalarForm = (key: string, value: string): string => {
   const kind = SCALAR_KINDS[key];
-  if (kind === "number") return String(Number(value));
-  if (kind === "flag") return canonicalToken(value);
-  if (key === "description") return descriptionText(value);
-  if (key === "features") return sortedForm(optionMap(value, "features"));
-  if (key === "nameserver" || key === "searchdomain") return orderedList(value);
-  if (key === "startup") return propertyString(value, "order");
-  if (key === "tags") return tagSet(value);
+  if (kind === "number") {
+    return String(Number(value));
+  }
+  if (kind === "flag") {
+    return canonicalToken(value);
+  }
+  if (key === "description") {
+    return descriptionText(value);
+  }
+  if (key === "features") {
+    return sortedForm(optionMap(value, "features"));
+  }
+  if (key === "nameserver" || key === "searchdomain") {
+    return orderedList(value);
+  }
+  if (key === "startup") {
+    return propertyString(value, "order");
+  }
+  if (key === "tags") {
+    return tagSet(value);
+  }
   return value;
 };

@@ -1,6 +1,7 @@
 // Ported from homeflare-kit (@homeflare/alchemy 0.55.0), src/proxmox/constraints.ts.
 // MIT — Timothy Schneider. See LICENSE-homeflare-kit and PROVENANCE.md.
 import type { PveForm } from "./resource.ts";
+
 export interface ParamConstraint {
   readonly type?: string;
   readonly required?: boolean;
@@ -21,12 +22,9 @@ export type EndpointKey = string;
 export interface ViolationOptions {
   readonly presence?: boolean;
 }
+// oxlint-disable-next-line typescript/no-misused-spread -- Preserve the port's Unicode-code-point length checks, not grapheme clusters.
 const lengthOf = (value: string): number => [...value].length;
-const checkValue = (
-  name: string,
-  value: string,
-  rule: ParamConstraint,
-): string[] => {
+const checkValue = (name: string, value: string, rule: ParamConstraint): string[] => {
   const out: string[] = [];
   if (rule.maxLength !== undefined && lengthOf(value) > rule.maxLength) {
     out.push(`${name}: at most ${rule.maxLength} characters`);
@@ -37,10 +35,7 @@ const checkValue = (
   if (rule.enum !== undefined && !rule.enum.includes(value)) {
     out.push(`${name}: must be one of ${rule.enum.join(", ")}`);
   }
-  if (
-    rule.pattern !== undefined &&
-    !new RegExp(rule.pattern, rule.patternFlags).test(value)
-  ) {
+  if (rule.pattern !== undefined && !new RegExp(rule.pattern, rule.patternFlags).test(value)) {
     out.push(`${name}: must match ${rule.patternSource ?? rule.pattern}`);
   }
   const numeric = Number(value);
@@ -64,8 +59,9 @@ export const violations = (
   for (const [name, rule] of Object.entries(table)) {
     const value = form[name];
     if (value === undefined) {
-      if (options.presence === true && rule.required === true)
+      if (options.presence === true && rule.required === true) {
         out.push(`${name}: required`);
+      }
       continue;
     }
     for (const item of typeof value === "string" ? [value] : value) {
@@ -74,10 +70,6 @@ export const violations = (
   }
   return out;
 };
-export const refusal = (
-  endpoint: EndpointKey,
-  found: readonly string[],
-): string =>
+export const refusal = (endpoint: EndpointKey, found: readonly string[]): string =>
   `${endpoint} would be rejected by the vendor:\n  - ${found.join("\n  - ")}\n` +
-  "These are the vendor's own limits, read from its published schema " +
-  "(packages/alchemy/src/proxmox/generated/constraints). Fix the declaration.";
+  "These are the local guards for supported keys, not a complete vendor schema. Fix the declaration.";

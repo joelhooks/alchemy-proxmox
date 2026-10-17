@@ -1,15 +1,16 @@
 // Ported from homeflare-kit (@homeflare/alchemy 0.55.0), src/proxmox/qemu-volume.ts.
 // MIT — Timothy Schneider. See LICENSE-homeflare-kit and PROVENANCE.md.
 import { sameMap } from "./lxc-wire.ts";
-const NEW_DISK = /^([^:\s]+):(\d+(?:\.\d+)?)$/;
-const NEW_CLOUDINIT = /^([^:\s]+):cloudinit$/;
-export type Disk = {
+
+const NEW_DISK = /^(?<source>[^:\s]+):(?<gib>\d+(?:\.\d+)?)$/u;
+const NEW_CLOUDINIT = /^(?<source>[^:\s]+):cloudinit$/u;
+export interface Disk {
   readonly kind: "fresh" | "volume";
   readonly source: string;
   readonly volname: string;
   readonly size: string | undefined;
   readonly options: Map<string, string>;
-};
+}
 export const parseDisk = (text: string): Disk => {
   const bare = NEW_DISK.exec(text) ?? NEW_CLOUDINIT.exec(text);
   if (bare !== null) {
@@ -39,10 +40,10 @@ export const parseDisk = (text: string): Disk => {
   }
   return { kind: "volume", options, size, source, volname };
 };
-export type DiskVerdict = {
+export interface DiskVerdict {
   readonly refuse?: string;
   readonly put?: string;
-};
+}
 const printOptions = (
   source: string,
   volname: string,
@@ -54,11 +55,7 @@ const printOptions = (
     ...[...options].map(([k, v]) => `${k}=${v}`),
     ...(size === undefined ? [] : [`size=${size}`]),
   ].join(",");
-export const judgeDisk = (
-  key: string,
-  declared: string,
-  live: string,
-): DiskVerdict => {
+export const judgeDisk = (key: string, declared: string, live: string): DiskVerdict => {
   const want = parseDisk(declared);
   const have = parseDisk(live);
   if (want.source !== have.source) {
@@ -69,9 +66,12 @@ export const judgeDisk = (
     };
   }
   if (want.kind === "fresh") {
-    if (want.options.size === 0) return {};
-    if ([...want.options].every(([k, v]) => have.options.get(k) === v))
+    if (want.options.size === 0) {
       return {};
+    }
+    if ([...want.options].every(([k, v]) => have.options.get(k) === v)) {
+      return {};
+    }
     return {
       put: printOptions(have.source, have.volname, want.options, have.size),
     };
@@ -83,18 +83,16 @@ export const judgeDisk = (
         "would detach the live volume to unusedN; attach or swap volumes by hand.",
     };
   }
-  if (
-    want.size !== undefined &&
-    have.size !== undefined &&
-    want.size !== have.size
-  ) {
+  if (want.size !== undefined && have.size !== undefined && want.size !== have.size) {
     return {
       refuse:
         `${key}: declared size ${want.size} differs from the live ${have.size}. This resource does ` +
         "not resize a disk through config -- omit size= and declare a diskSizesGiB target instead.",
     };
   }
-  if (sameMap(want.options, have.options)) return {};
+  if (sameMap(want.options, have.options)) {
+    return {};
+  }
   return {
     put: printOptions(have.source, have.volname, want.options, have.size),
   };

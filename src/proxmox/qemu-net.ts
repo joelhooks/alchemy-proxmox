@@ -33,31 +33,21 @@ export const netMaps = (declared: string, live: string) => {
   const have = netPairs(live);
   const wantModel = modelKey(want);
   const haveModel = modelKey(have);
-  if (
-    wantModel !== undefined &&
-    (want.get(wantModel) ?? "") === "" &&
-    haveModel !== undefined
-  ) {
+  if (wantModel !== undefined && (want.get(wantModel) ?? "") === "" && haveModel !== undefined) {
     want.set(wantModel, have.get(haveModel) ?? "");
   }
   return { have, want };
 };
 export const sameNet = (declared: string, live: string): boolean => {
   const { have, want } = netMaps(declared, live);
-  return (
-    have.size === want.size && [...want].every(([k, v]) => have.get(k) === v)
-  );
+  return have.size === want.size && [...want].every(([k, v]) => have.get(k) === v);
 };
 export const netWrite = (declared: string, live: string): string => {
   const want = netPairs(declared);
   const wantModel = modelKey(want);
   const have = netPairs(live);
   const haveModel = modelKey(have);
-  if (
-    wantModel !== undefined &&
-    (want.get(wantModel) ?? "") === "" &&
-    haveModel !== undefined
-  ) {
+  if (wantModel !== undefined && (want.get(wantModel) ?? "") === "" && haveModel !== undefined) {
     want.set(wantModel, have.get(haveModel) ?? "");
   }
   return [...want].map(([k, v]) => (v === "" ? k : `${k}=${v}`)).join(",");

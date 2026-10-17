@@ -1,24 +1,18 @@
 // Ported from homeflare-kit (@homeflare/alchemy 0.55.0), src/proxmox/qemu-judge.ts.
 // MIT — Timothy Schneider. See LICENSE-homeflare-kit and PROVENANCE.md.
-import {
-  type VmProps,
-  declaredKeys,
-  declaredValue,
-  indexedKey,
-  wireValue,
-} from "./qemu-props.ts";
+import { declaredKeys, declaredValue, indexedKey, wireValue } from "./qemu-props.ts";
+import type { VmProps } from "./qemu-props.ts";
 import { judgeDisk } from "./qemu-volume.ts";
 import { netWrite, sameNet } from "./qemu-net.ts";
 import { diskSizeDrift } from "./qemu-size.ts";
-export type VmChange = {
+import { tagSet } from "./lxc-wire.ts";
+
+export interface VmChange {
   readonly put: Record<string, string>;
   readonly refuse: readonly string[];
   readonly drift: readonly string[];
-};
-export const judge = (
-  props: VmProps,
-  config: Record<string, string>,
-): VmChange => {
+}
+export const judge = (props: VmProps, config: Record<string, string>): VmChange => {
   const put: Record<string, string> = {};
   const refuse: string[] = [];
   const drift = new Set<string>(diskSizeDrift(props, config));
@@ -52,17 +46,15 @@ export const judge = (
       }
       continue;
     }
-    if (want !== (have ?? "")) {
+    const same = key === "tags" ? tagSet(want) === tagSet(have ?? "") : want === (have ?? "");
+    if (!same) {
       drift.add(key);
       put[key] = want;
     }
   }
-  return { drift: [...drift].sort(), put, refuse };
+  return { drift: [...drift].toSorted(), put, refuse };
 };
-export const identityRefusal = (
-  vmid: number,
-  was: number | undefined,
-): string | undefined =>
+export const identityRefusal = (vmid: number, was: number | undefined): string | undefined =>
   was === undefined || vmid === was
     ? undefined
     : `vmid: ${String(was)} -> ${String(vmid)} is a different VM. Declare it as a new resource; ` +

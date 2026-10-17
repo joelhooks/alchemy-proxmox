@@ -1,7 +1,8 @@
 // Ported from homeflare-kit (@homeflare/alchemy 0.55.0), src/proxmox/lxc-volume.ts.
 // MIT — Timothy Schneider. See LICENSE-homeflare-kit and PROVENANCE.md.
 import { optionMap, pairs, sameMap } from "./lxc-wire.ts";
-const NEW_DISK = /^([^:\s]+):(\d+(?:\.\d+)?)$/;
+
+const NEW_DISK = /^(?<source>[^:\s]+):(?<gib>\d+(?:\.\d+)?)$/u;
 const UNITS: Readonly<Record<string, number>> = {
   G: 1024 ** 3,
   K: 1024,
@@ -9,20 +10,20 @@ const UNITS: Readonly<Record<string, number>> = {
   T: 1024 ** 4,
 };
 export const sizeBytes = (text: string): number | undefined => {
-  const match = /^(\d+(?:\.\d+)?)([KMGT])?$/.exec(text.trim());
-  if (match === null) return undefined;
-  return Math.trunc(
-    Number(match[1]) * (match[2] === undefined ? 1 : (UNITS[match[2]] ?? 1)),
-  );
+  const match = /^(?<amount>\d+(?:\.\d+)?)(?<unit>[KMGT])?$/u.exec(text.trim());
+  if (match === null) {
+    return undefined;
+  }
+  return Math.trunc(Number(match[1]) * (match[2] === undefined ? 1 : (UNITS[match[2]] ?? 1)));
 };
-export type Volume = {
+export interface Volume {
   readonly kind: "new" | "volume" | "bind" | "device";
   readonly source: string;
   readonly volname: string;
   readonly size: number | undefined;
   readonly sizeText: string | undefined;
   readonly options: Map<string, string>;
-};
+}
 export const parseVolume = (text: string): Volume => {
   const [first] = pairs(text, "volume");
   const spec = first?.[0] === "volume" ? first[1] : "";
@@ -57,32 +58,29 @@ export const parseVolume = (text: string): Volume => {
     volname: at === -1 ? "" : spec.slice(at + 1),
   };
 };
-export type VolumeVerdict = {
+export interface VolumeVerdict {
   readonly refuse?: string;
   readonly rootOnly?: boolean;
   readonly put?: string;
   readonly resize?: string;
-};
-export const isHostPath = (volume: Volume) =>
-  volume.kind === "bind" || volume.kind === "device";
+}
+export const isHostPath = (volume: Volume) => volume.kind === "bind" || volume.kind === "device";
 const rewrite = (live: Volume, declared: Volume) => {
   const parts = [`${live.source}:${live.volname}`];
-  for (const [key, value] of declared.options) parts.push(`${key}=${value}`);
-  if (live.sizeText !== undefined) parts.push(`size=${live.sizeText}`);
+  for (const [key, value] of declared.options) {
+    parts.push(`${key}=${value}`);
+  }
+  if (live.sizeText !== undefined) {
+    parts.push(`size=${live.sizeText}`);
+  }
   return parts.join(",");
 };
-export const judgeVolume = (
-  key: string,
-  declared: string,
-  live: string,
-): VolumeVerdict => {
+export const judgeVolume = (key: string, declared: string, live: string): VolumeVerdict => {
   const want = parseVolume(declared);
   const have = parseVolume(live);
   if (isHostPath(want) || isHostPath(have)) {
     const same =
-      want.kind === have.kind &&
-      want.source === have.source &&
-      sameMap(want.options, have.options);
+      want.kind === have.kind && want.source === have.source && sameMap(want.options, have.options);
     return same ? {} : { rootOnly: true };
   }
   if (want.source !== have.source) {
@@ -100,11 +98,7 @@ export const judgeVolume = (
     };
   }
   let resize: string | undefined;
-  if (
-    want.size !== undefined &&
-    have.size !== undefined &&
-    want.size !== have.size
-  ) {
+  if (want.size !== undefined && have.size !== undefined && want.size !== have.size) {
     if (want.size < have.size) {
       return {
         refuse:
@@ -115,9 +109,7 @@ export const judgeVolume = (
     }
     resize = want.sizeText;
   }
-  const put = sameMap(want.options, have.options)
-    ? undefined
-    : rewrite(have, want);
+  const put = sameMap(want.options, have.options) ? undefined : rewrite(have, want);
   return {
     ...(put === undefined ? {} : { put }),
     ...(resize === undefined ? {} : { resize }),
