@@ -18,11 +18,12 @@ The last homeflare-kit commit we hold a mirror of is `eb39d03` (2026-10-05), whi
 
 Every ported file below retains its source-file attribution header. Paths on the right are relative to the published tarball's `src/` directory.
 
-| Local files                                                                                                                                                                                                                                      | Source files                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
-| `src/proxmox/lxc.ts`, `lxc-create-form.ts`, `lxc-errors.ts`, `lxc-identity.ts`, `lxc-judge.ts`, `lxc-lifecycle.ts`, `lxc-props.ts`, `lxc-read.ts`, `lxc-task.ts`, `lxc-volume.ts`, `lxc-wire.ts`                                                 | Same basenames under `proxmox/` |
-| `src/proxmox/qemu.ts`, `qemu-dns.ts`, `qemu-errors.ts`, `qemu-form.ts`, `qemu-judge.ts`, `qemu-lifecycle.ts`, `qemu-net.ts`, `qemu-props.ts`, `qemu-read.ts`, `qemu-resize.ts`, `qemu-size.ts`, `qemu-spec.ts`, `qemu-task.ts`, `qemu-volume.ts` | Same basenames under `proxmox/` |
-| `src/proxmox/values.ts`, `constraints.ts`, `constraint-guard.ts`, `resource-guard.ts`, `distilled-pve.ts`                                                                                                                                        | Same basenames under `proxmox/` |
+| Local files                                                                                                                                                                                                                                      | Source files                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `src/proxmox/lxc.ts`, `lxc-create-form.ts`, `lxc-errors.ts`, `lxc-identity.ts`, `lxc-judge.ts`, `lxc-lifecycle.ts`, `lxc-props.ts`, `lxc-read.ts`, `lxc-task.ts`, `lxc-volume.ts`, `lxc-wire.ts`                                                 | Same basenames under `proxmox/`                                      |
+| `src/proxmox/qemu.ts`, `qemu-dns.ts`, `qemu-errors.ts`, `qemu-form.ts`, `qemu-judge.ts`, `qemu-lifecycle.ts`, `qemu-net.ts`, `qemu-props.ts`, `qemu-read.ts`, `qemu-resize.ts`, `qemu-size.ts`, `qemu-spec.ts`, `qemu-task.ts`, `qemu-volume.ts` | Same basenames under `proxmox/`                                      |
+| `src/proxmox/values.ts`, `constraints.ts`, `constraint-guard.ts`, `resource-guard.ts`, `distilled-pve.ts`                                                                                                                                        | Same basenames under `proxmox/`                                      |
+| `src/proxmox/property-string.ts`                                                                                                                                                                                                                 | Splitting adapted from `proxmox/lxc-wire.ts` and `proxmox/values.ts` |
 
 The port removes comment banners, OpenBao minting, lease caching, cluster-member failover and unrelated resource kinds. `distilled-pve.ts` supplies one SDK credential with retries disabled and a bounded call. `resource-guard.ts` guards only VM forms. New provider collection, credential re-exports, pool membership checks, ownership tags, discovery and missing-guest errors connect the two ported resources.
 
@@ -31,6 +32,32 @@ The port removes comment banners, OpenBao minting, lease caching, cluster-member
 Alchemy beta.83 native adoption replaces all copied `src/ownership/*` helpers and `lxc-adoption.ts`. The port no longer reads State rows, Stack resource declarations, AlchemyContext or trace spans to prove ownership. `Provider.succeed` handlers return native `Unowned(attributes)` for an unrecorded, untagged guest. Recorded output or an FQN-derived ownership tag establishes ownership. Only creation stamps that tag; adoption never writes, even when explicitly enabled. Both resources refuse adoption unless the declared keys already match.
 
 The copied generated constraint tables and their index were removed. They had no generator or no-diff gate in this repository. `constraint-guard.ts` now carries a deliberately partial, handwritten set of guards for the supported endpoint keys, adapted from the published homeflare guards. It checks only the listed integer bounds, required create/resize fields, resize slots, VM nameserver format and root-only VM writes. It is not a complete PVE schema. The SDK and server still validate the full request. Unused generic value helpers were also cut; retained helpers preserve their port attribution. Tag normalization now deduplicates after case-folding, covered by a parser assertion, so case variants do not manufacture tag drift.
+
+### Property-string comparison
+
+`src/proxmox/property-string.ts` supplies one pure parser for every supported property-string family. `scripts/generate-property-formats.ts` extracts only API metadata facts from pinned pve-docs `b423460d22af888462b3d31dfff374abcfda95fa`, `api-viewer/apidata.js`. The generated table records the source SHA-256. Inline formats supply `default_key`, `alias`, `keyAlias` and field types. Named formats expose their grammar through `typetext`; the script reads the default-subkey markers and typed fields there. No documentation descriptions are copied. This is comparison metadata, not a complete validation schema or a revival of the deleted constraint tables.
+
+`pnpm generate:property-formats` regenerates the table. `pnpm check:property-formats` verifies the mirror revision and unmodified API file, regenerates in memory with the pinned formatter, and fails if the committed table differs. The normal check gate runs it. Builds and runtime imports use committed metadata and never read the mirror.
+
+| Guest | Supported property keys checked | Default subkey / aliases                                       |
+| ----- | ------------------------------- | -------------------------------------------------------------- |
+| VM    | `agent`                         | `enabled`; filesystem-freeze aliases resolve to `freeze-fs`    |
+| VM    | `memory`                        | `current`                                                      |
+| VM    | `cpu`                           | `cputype`, from named-format grammar                           |
+| VM    | `boot`                          | `legacy`, not `order`; the device list stays ordered           |
+| VM    | `net[n]`                        | `model`; NIC model aliases expand to `model` plus `macaddr`    |
+| VM    | `ide[n]`, `scsi[n]`             | `file`; `volume` and documented burst-length aliases normalize |
+| VM    | `ipconfig[n]`                   | No default subkey                                              |
+| LXC   | `features`, `net[n]`            | No default subkey                                              |
+| LXC   | `rootfs`, `mp[n]`               | `volume`                                                       |
+| LXC   | `dev[n]`                        | `path`                                                         |
+| LXC   | `startup`                       | `order`, from named-format grammar                             |
+
+The remaining declared config keys were checked too: VM `serial[n]` stays exact. VM name, scalar flags, cores, sockets, SCSI controller, resolver lists and tags have no property-string default-key grammar. Neither do LXC architecture, console mode, hostname, OS type, numeric settings, scalar flags, description, timezone, resolver lists and tags. Their existing scalar/list policies are unchanged. Creation controls and identity fields are not config property strings. No unsupported API families were added.
+
+Parsed fields preserve extra and unknown subkeys and case-sensitive string values. Boolean and numeric fields normalize by their schema type; MAC addresses normalize case. There is no new default-value filling or removal. Existing LXC default elision and mount-option handling, generated-MAC handling, disk identity checks and resize policies remain separate policies after parsing. Disk source fields are now found by name, so field order and explicit default-key spelling do not change identity or bypass allocation-shrink checks.
+
+VM `agent` now accepts `PveFlag | string`: flag shorthand cannot describe additional fields, so string declarations are needed to adopt or manage those fields without dropping them. The parser does not turn an extra agent subkey into an implicit default. Pure parsing/comparison tests use public schema-shaped examples, never private live identities or wire configurations. Live confirmation remains an owner gate.
 
 ### Post-create tagging and pool permissions
 

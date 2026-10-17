@@ -16,27 +16,6 @@ export const canonicalToken = (raw: string) => {
   }
   return lowered;
 };
-const propertyPairs = (value: unknown, defaultKey?: string): [string, string][] => {
-  if (typeof value === "string") {
-    return value.split(",").map((part) => {
-      const [key, ...rest] = part.split("=");
-      return rest.length === 0 && defaultKey !== undefined
-        ? [defaultKey, key ?? ""]
-        : [key ?? "", rest.join("=")];
-    });
-  }
-  if (typeof value === "object" && value !== null) {
-    return Object.entries(value).map(([key, entry]) => [key, String(entry)]);
-  }
-  return [];
-};
-export const propertyString = (value: unknown, defaultKey?: string): string =>
-  propertyPairs(value, defaultKey)
-    .map(([key, entry]) => [key.trim(), canonicalToken(entry)] as const)
-    .filter(([key]) => key !== "")
-    .map(([key, entry]) => `${key}=${entry}`)
-    .toSorted()
-    .join(",");
 export const withClears = (
   fields: Record<string, string | undefined>,
   clear: readonly string[],

@@ -23,11 +23,13 @@
   },
   "scripts": {
     "vendor:agent-sources": "bash scripts/vendor-agent-sources.sh",
+    "generate:property-formats": "node scripts/generate-property-formats.ts",
+    "check:property-formats": "node scripts/generate-property-formats.ts --check",
     "build": "effect-tsgo patch && tsc -p tsconfig.build.json",
     "prepare": "pnpm run build",
     "typecheck": "pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json",
-    "format": "oxfmt --write src test *.ts *.json AGENTS.md README.md PROVENANCE.md pnpm-workspace.yaml",
-    "check": "pnpm typecheck && oxfmt --check src test *.ts *.json AGENTS.md README.md PROVENANCE.md pnpm-workspace.yaml && oxlint --type-aware",
+    "format": "oxfmt --write src test scripts *.ts *.json AGENTS.md README.md PROVENANCE.md pnpm-workspace.yaml",
+    "check": "pnpm check:property-formats && pnpm typecheck && oxfmt --check src test scripts *.ts *.json AGENTS.md README.md PROVENANCE.md pnpm-workspace.yaml && oxlint --type-aware",
     "test": "pnpm build && ALCHEMY_TELEMETRY_DISABLED=1 vitest run"
   },
   "dependencies": {

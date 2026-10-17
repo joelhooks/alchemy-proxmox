@@ -4,7 +4,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { declaredValue, indexedKey } from "./qemu-props.ts";
 import type { VmProps } from "./qemu-props.ts";
-import { parseDisk } from "./qemu-volume.ts";
+import { diskFile, parseDisk } from "./qemu-volume.ts";
 
 export class QemuDiskResizeRefused extends Data.TaggedError("QemuDiskResizeRefused")<{
   readonly disk: string;
@@ -45,10 +45,10 @@ export const validateDiskSizes = (props: VmProps, olds?: VmProps) =>
         continue;
       }
       const next = /^(?<source>[^:]+):(?<gib>\d+(?:\.\d+)?)$/u.exec(
-        String(declaredValue(props, key)),
+        diskFile(String(declaredValue(props, key)), key),
       );
       const previous = /^(?<source>[^:]+):(?<gib>\d+(?:\.\d+)?)$/u.exec(
-        String(olds === undefined ? undefined : declaredValue(olds, key)),
+        diskFile(String(olds === undefined ? undefined : declaredValue(olds, key)), key),
       );
       if (next !== null && previous !== null && Number(next[2]) < Number(previous[2])) {
         yield* Effect.fail(
@@ -92,8 +92,8 @@ export const validateDiskSizes = (props: VmProps, olds?: VmProps) =>
       ) {
         reason = "the target must be a positive, safely representable integer GiB size";
       } else if (
-        value.split(",")[0]?.endsWith(":cloudinit") === true ||
-        parseDisk(value).options.get("media") === "cdrom"
+        diskFile(value, disk).endsWith(":cloudinit") ||
+        parseDisk(value, disk).options.get("media") === "cdrom"
       ) {
         reason = "cloud-init and CD-ROM drives cannot be resized";
       } else if (previous !== undefined && size < previous) {

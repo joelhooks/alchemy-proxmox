@@ -15,7 +15,8 @@ export interface VmProps {
   sockets?: number;
   cpu?: string;
   onboot?: PveFlag;
-  agent?: PveFlag;
+  /** Flag shorthand or a complete PVE agent property string. */
+  agent?: PveFlag | string;
   boot?: string;
   scsihw?: string;
   nameserver?: string;

@@ -9,12 +9,12 @@ import {
   netMaps,
   netWrite,
   optionMap,
-  pairs,
   sameMap,
   scalarForm,
   sortedForm,
 } from "./lxc-wire.ts";
 import { bool, canonicalToken } from "./values.ts";
+import { parseProperty, propertyFormat } from "./property-string.ts";
 
 export interface LxcChange {
   readonly put: Record<string, string>;
@@ -32,10 +32,7 @@ export const rootOnly = (vmid: number, key: string, value: string, why: string):
   `${key}: ${why} PVE lets only root@pam write it, and an API token is never root@pam. Run ` +
   `\`pct set ${String(vmid)} ${value === "" ? `--delete ${key}` : `--${key} '${value}'`}\` ` +
   "on the node, then plan again.";
-const rawFeatures = (value: string) =>
-  new Map(
-    pairs(value).map(([key, entry]) => [key, key === "mount" ? entry : canonicalToken(entry)]),
-  );
+const rawFeatures = (value: string) => parseProperty(value, propertyFormat("lxc", "features"));
 export const featuresNeedRoot = (
   live: string,
   sent: string | undefined,
@@ -57,7 +54,7 @@ export const featuresNeedRoot = (
 export const featureWhy = (unprivileged: boolean): string =>
   unprivileged ? "A feature other than nesting." : "Any feature on a privileged guest.";
 const devSame = (want: string, have: string) =>
-  sortedForm(optionMap(want, "dev", "path")) === sortedForm(optionMap(have, "dev", "path"));
+  sortedForm(optionMap(want, "dev")) === sortedForm(optionMap(have, "dev"));
 
 // oxlint-disable-next-line complexity -- Preserve the ported per-key LXC decision matrix instead of splitting its shared change accumulator.
 export const judge = (props: LxcProps, live: Record<string, unknown>): LxcChange => {

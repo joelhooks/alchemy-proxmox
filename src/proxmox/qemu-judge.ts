@@ -5,13 +5,23 @@ import type { VmProps } from "./qemu-props.ts";
 import { judgeDisk } from "./qemu-volume.ts";
 import { netWrite, sameNet } from "./qemu-net.ts";
 import { diskSizeDrift } from "./qemu-size.ts";
-import { tagSet } from "./lxc-wire.ts";
+import { tagSet, sameMap } from "./lxc-wire.ts";
+import { parseProperty, propertyFormat } from "./property-string.ts";
 
 export interface VmChange {
   readonly put: Record<string, string>;
   readonly refuse: readonly string[];
   readonly drift: readonly string[];
 }
+const sameScalar = (key: string, want: string, have: string): boolean => {
+  if (key === "tags") {
+    return tagSet(want) === tagSet(have);
+  }
+  const format = propertyFormat("qemu", key);
+  return format === undefined
+    ? want === have
+    : sameMap(parseProperty(want, format), parseProperty(have, format));
+};
 export const judge = (props: VmProps, config: Record<string, string>): VmChange => {
   const put: Record<string, string> = {};
   const refuse: string[] = [];
@@ -46,7 +56,7 @@ export const judge = (props: VmProps, config: Record<string, string>): VmChange 
       }
       continue;
     }
-    const same = key === "tags" ? tagSet(want) === tagSet(have ?? "") : want === (have ?? "");
+    const same = sameScalar(key, want, have ?? "");
     if (!same) {
       drift.add(key);
       put[key] = want;

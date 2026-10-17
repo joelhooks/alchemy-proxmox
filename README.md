@@ -51,6 +51,7 @@ The token needs the privileges required by the declared operations, including ac
 - Creation first makes an untagged guest in its pool, then stamps desired user tags and an ownership tag with a digest-guarded config PUT and verifies a fresh read before returning output. `OwnershipTagStampFailed` names the VMID if stamping or readback fails; it never deletes the guest. A crash before stamping can leave an unrecorded, tagless guest that needs operator inspection and explicit adoption.
 - New guests receive an ownership tag derived from the resource FQN. Recorded output or that tag establishes ownership. `list()` discovers tagged guests; tagless adopted guests remain in state but do not appear in discovery. Omitted user tags stay unmanaged.
 - Omitted config keys are unmanaged. Wire names follow PVE (`rootfs`, `mp0`, `scsi0`, `net0`, `ipconfig0`). The exported props describe the supported fields.
+- Property strings compare parsed fields using the pinned PVE format definitions: default subkeys, aliases and subkey order normalize without dropping extra fields. VM `agent` accepts a flag or a string: `agent: 1` matches `enabled=1`, while additional subkeys must match an explicit string declaration. Boot device-list order and case-sensitive values remain significant.
 - Both resources retain by default. Opt in through Alchemy's removal policy to delete. Deletion refuses a guest that differs from its last declaration. It never stops a running guest or forces deletion.
 - Neither resource plans replacement. Identity, template, node, storage and immutable config changes fail rather than replacing a guest. Move guests and volumes by hand.
 - `pool` selects an existing pool at creation. Reads verify declared membership. This package does not create pools or move guests between them.
@@ -69,7 +70,7 @@ pnpm check
 pnpm test
 ```
 
-Offline tests cover config parsing and build the real Alchemy Node platform layer without credentials. The platform smoke test runs even when the PVE suite skips, so a missing Node platform peer fails locally. There are no mock servers. `pnpm check` runs Effect/TypeScript checking, oxfmt and type-aware oxlint with Ultracite core. The real lifecycle test skips loudly unless every target variable is present and `PROXMOX_LIVE=1` explicitly opts in:
+Offline tests cover config parsing and build the real Alchemy Node platform layer without credentials. The platform smoke test runs even when the PVE suite skips, so a missing Node platform peer fails locally. There are no mock servers. `pnpm check` verifies property-format metadata against the pinned API data, then runs Effect/TypeScript checking, oxfmt and type-aware oxlint with Ultracite core. After changing the PVE pin, regenerate with `pnpm generate:property-formats`; `pnpm check:property-formats` fails on drift. These development checks need the source mirror, but package builds, preparation and runtime imports use the committed metadata and need no mirror. The real lifecycle test skips loudly unless every target variable is present and `PROXMOX_LIVE=1` explicitly opts in:
 
 - Credentials: `PROXMOX_URL`, `PROXMOX_TOKEN_ID`, `PROXMOX_TOKEN_SECRET`.
 - Throwaway guest: `PROXMOX_NODE`, `PROXMOX_VMID`, `PROXMOX_POOL`, `PROXMOX_STORAGE`, `PROXMOX_TEMPLATE`, `PROXMOX_BRIDGE`.

@@ -1,6 +1,6 @@
 // Ported from homeflare-kit (@homeflare/alchemy 0.55.0), src/proxmox/lxc-volume.ts.
 // MIT — Timothy Schneider. See LICENSE-homeflare-kit and PROVENANCE.md.
-import { optionMap, pairs, sameMap } from "./lxc-wire.ts";
+import { optionMap, sameMap } from "./lxc-wire.ts";
 
 const NEW_DISK = /^(?<source>[^:\s]+):(?<gib>\d+(?:\.\d+)?)$/u;
 const UNITS: Readonly<Record<string, number>> = {
@@ -24,10 +24,9 @@ export interface Volume {
   readonly sizeText: string | undefined;
   readonly options: Map<string, string>;
 }
-export const parseVolume = (text: string): Volume => {
-  const [first] = pairs(text, "volume");
-  const spec = first?.[0] === "volume" ? first[1] : "";
-  const options = optionMap(text, "volume", "volume");
+export const parseVolume = (text: string, key = "rootfs"): Volume => {
+  const options = optionMap(text, "volume", key);
+  const spec = options.get("volume") ?? "";
   options.delete("volume");
   const sizeText = options.get("size");
   options.delete("size");
@@ -76,8 +75,8 @@ const rewrite = (live: Volume, declared: Volume) => {
   return parts.join(",");
 };
 export const judgeVolume = (key: string, declared: string, live: string): VolumeVerdict => {
-  const want = parseVolume(declared);
-  const have = parseVolume(live);
+  const want = parseVolume(declared, key);
+  const have = parseVolume(live, key);
   if (isHostPath(want) || isHostPath(have)) {
     const same =
       want.kind === have.kind && want.source === have.source && sameMap(want.options, have.options);

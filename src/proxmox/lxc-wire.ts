@@ -1,19 +1,8 @@
 // Ported from homeflare-kit (@homeflare/alchemy 0.55.0), src/proxmox/lxc-wire.ts.
 // MIT — Timothy Schneider. See LICENSE-homeflare-kit and PROVENANCE.md.
-import { canonicalToken, propertyString } from "./values.ts";
+import { canonicalToken } from "./values.ts";
+import { parseProperty, propertyFormat } from "./property-string.ts";
 
-export const pairs = (value: string, defaultKey?: string): [string, string][] =>
-  value
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part !== "")
-    .map((part): [string, string] => {
-      const at = part.indexOf("=");
-      if (at === -1) {
-        return [defaultKey ?? part, defaultKey === undefined ? "" : part];
-      }
-      return [part.slice(0, at).trim(), part.slice(at + 1).trim()];
-    });
 const DEFAULTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   dev: { "deny-write": "0" },
   features: {
@@ -33,45 +22,28 @@ const DEFAULTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     shared: "0",
   },
 };
-const FLAGS = new Set([
-  "acl",
-  "backup",
-  "deny-write",
-  "firewall",
-  "force_rw_sys",
-  "fuse",
-  "host-managed",
-  "keepattrs",
-  "keyctl",
-  "link_down",
-  "mknod",
-  "nesting",
-  "quota",
-  "replicate",
-  "ro",
-  "shared",
-]);
 const SETS = new Set(["mount", "mountoptions"]);
 const canonicalValue = (key: string, value: string) => {
-  if (FLAGS.has(key)) {
-    return canonicalToken(value);
-  }
   if (SETS.has(key)) {
     return [...new Set(value.split(";").map((part) => part.trim()))].toSorted().join(";");
-  }
-  if (key === "hwaddr") {
-    return value.toUpperCase();
   }
   return value;
 };
 export const optionMap = (
   value: string,
   family: keyof typeof DEFAULTS,
-  defaultKey?: string,
+  propertyKey?: string,
 ): Map<string, string> => {
+  const keys: Readonly<Record<string, string>> = {
+    dev: "dev0",
+    features: "features",
+    net: "net0",
+    volume: "rootfs",
+  };
   const defaults = DEFAULTS[family] ?? {};
+  const format = propertyFormat("lxc", propertyKey ?? keys[family] ?? family);
   const out = new Map<string, string>();
-  for (const [key, raw] of pairs(value, defaultKey)) {
+  for (const [key, raw] of parseProperty(value, format)) {
     const canonical = canonicalValue(key, raw);
     if (defaults[key] !== canonical) {
       out.set(key, canonical);
@@ -99,8 +71,9 @@ export const netMaps = (declared: string, live: string) => {
   return { have, want };
 };
 export const netWrite = (declared: string, live: string | undefined) => {
-  const want = new Map(pairs(declared));
-  const mac = live === undefined ? undefined : new Map(pairs(live)).get("hwaddr");
+  const format = propertyFormat("lxc", "net0");
+  const want = parseProperty(declared, format);
+  const mac = live === undefined ? undefined : parseProperty(live, format).get("hwaddr");
   if (!want.has("hwaddr") && mac !== undefined) {
     want.set("hwaddr", mac);
   }
@@ -183,7 +156,7 @@ export const scalarForm = (key: string, value: string): string => {
     return orderedList(value);
   }
   if (key === "startup") {
-    return propertyString(value, "order");
+    return sortedForm(parseProperty(value, propertyFormat("lxc", key)));
   }
   if (key === "tags") {
     return tagSet(value);

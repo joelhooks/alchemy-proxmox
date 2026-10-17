@@ -1,6 +1,7 @@
 // Ported from homeflare-kit (@homeflare/alchemy 0.55.0), src/proxmox/qemu-volume.ts.
 // MIT — Timothy Schneider. See LICENSE-homeflare-kit and PROVENANCE.md.
 import { sameMap } from "./lxc-wire.ts";
+import { parseProperty, propertyFormat } from "./property-string.ts";
 
 const NEW_DISK = /^(?<source>[^:\s]+):(?<gib>\d+(?:\.\d+)?)$/u;
 const NEW_CLOUDINIT = /^(?<source>[^:\s]+):cloudinit$/u;
@@ -11,33 +12,30 @@ export interface Disk {
   readonly size: string | undefined;
   readonly options: Map<string, string>;
 }
-export const parseDisk = (text: string): Disk => {
-  const bare = NEW_DISK.exec(text) ?? NEW_CLOUDINIT.exec(text);
+export const diskFile = (text: string, key = "scsi0") =>
+  parseProperty(text, propertyFormat("qemu", key)).get("file") ?? "";
+export const parseDisk = (text: string, key = "scsi0"): Disk => {
+  const options = parseProperty(text, propertyFormat("qemu", key));
+  const file = options.get("file") ?? "";
+  options.delete("file");
+  const size = options.get("size");
+  options.delete("size");
+  const bare = NEW_DISK.exec(file) ?? NEW_CLOUDINIT.exec(file);
   if (bare !== null) {
+    if (file.endsWith(":0") && options.has("import-from")) {
+      options.delete("import-from");
+    }
     return {
       kind: "fresh",
-      options: new Map(),
+      options,
       size: undefined,
       source: bare[1] ?? "",
       volname: "",
     };
   }
-  const [first, ...rest] = text.split(",");
-  const at = (first ?? "").indexOf(":");
-  const source = at === -1 ? (first ?? "") : (first ?? "").slice(0, at);
-  const volname = at === -1 ? "" : (first ?? "").slice(at + 1);
-  const options = new Map(
-    rest.map((part): [string, string] => {
-      const eq = part.indexOf("=");
-      return eq === -1 ? [part, ""] : [part.slice(0, eq), part.slice(eq + 1)];
-    }),
-  );
-  const size = options.get("size");
-  options.delete("size");
-  if (volname === "0" && options.has("import-from")) {
-    options.delete("import-from");
-    return { kind: "fresh", options, size: undefined, source, volname: "" };
-  }
+  const at = file.indexOf(":");
+  const source = at === -1 ? file : file.slice(0, at);
+  const volname = at === -1 ? "" : file.slice(at + 1);
   return { kind: "volume", options, size, source, volname };
 };
 export interface DiskVerdict {
@@ -56,8 +54,8 @@ const printOptions = (
     ...(size === undefined ? [] : [`size=${size}`]),
   ].join(",");
 export const judgeDisk = (key: string, declared: string, live: string): DiskVerdict => {
-  const want = parseDisk(declared);
-  const have = parseDisk(live);
+  const want = parseDisk(declared, key);
+  const have = parseDisk(live, key);
   if (want.source !== have.source) {
     return {
       refuse:
