@@ -20,6 +20,7 @@ import { runPve } from "./distilled-pve.ts";
 import { tagSet } from "./lxc-wire.ts";
 import { text } from "./values.ts";
 import { taggedGuests } from "./discovery.ts";
+import { validatePropertyStrings } from "./property-validation.ts";
 
 export type { LxcAttributes, LxcProps } from "./lxc-props.ts";
 
@@ -34,6 +35,7 @@ const effective = (props: LxcProps, fqn: string, live: Record<string, unknown>):
     ? withTag({ ...props, tags: props.tags ?? text(live.tags) }, fqn)
     : props;
 const createGuard = Effect.fn(function* createGuardEffect(props: LxcProps) {
+  yield* validatePropertyStrings("lxc", { ...props });
   const reasons = createRefusals(props);
   if (reasons.length > 0) {
     yield* refuse(props, reasons);
@@ -92,6 +94,7 @@ const stampCreatedOwnership = (props: LxcProps, fqn: string) =>
 export const LxcProvider = () =>
   Provider.succeed(Lxc, {
     delete: Effect.fn(function* deleteGuestEffect({ fqn, olds, output }) {
+      yield* validatePropertyStrings("lxc", { ...olds });
       const where = { ...olds, node: output.node, vmid: output.vmid };
       const live = yield* readLive(where);
       if (live === undefined) {
@@ -112,6 +115,7 @@ export const LxcProvider = () =>
         // oxlint-disable-next-line unicorn/no-useless-undefined -- Alchemy optional read/diff results are explicitly undefined, not void.
         return undefined;
       }
+      yield* validatePropertyStrings("lxc", { ...news });
       const live = yield* readLive(news);
       if (live === undefined) {
         yield* requireRecreation(news);
@@ -138,6 +142,7 @@ export const LxcProvider = () =>
       return found.filter((guest) => guest !== undefined);
     }),
     read: Effect.fn(function* readEffect({ fqn, olds, output }) {
+      yield* validatePropertyStrings("lxc", { ...olds });
       const where = { ...olds, node: output?.node ?? olds.node, vmid: output?.vmid ?? olds.vmid };
       const live = yield* readLive(where);
       if (live === undefined) {
@@ -165,6 +170,7 @@ export const LxcProvider = () =>
           identity.map(({ key }) => key),
         );
       }
+      yield* validatePropertyStrings("lxc", { ...news });
       const live = yield* readLive(news);
       let declared = news;
       if (live === undefined) {

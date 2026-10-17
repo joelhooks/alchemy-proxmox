@@ -20,6 +20,7 @@ import { runPve } from "./distilled-pve.ts";
 import { requireRecreation } from "./missing-guest.ts";
 import { hasTag, requireOwnership, withTag, OwnershipTagStampFailed } from "./ownership.ts";
 import { tagSet } from "./lxc-wire.ts";
+import { validatePropertyStrings } from "./property-validation.ts";
 
 export type { VmAttributes, VmProps } from "./qemu-props.ts";
 
@@ -73,6 +74,7 @@ const stampCreatedOwnership = (props: VmProps, fqn: string) =>
 export const VmProvider = () =>
   Provider.succeed(Vm, {
     delete: Effect.fn(function* deleteGuestEffect({ fqn, olds, output }) {
+      yield* validatePropertyStrings("qemu", { ...olds });
       const props = { ...olds, node: output.node, vmid: output.vmid };
       const live = yield* readQemu(props);
       if (live === undefined) {

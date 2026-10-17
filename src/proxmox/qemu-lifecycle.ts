@@ -10,6 +10,7 @@ import { readVm } from "./qemu-read.ts";
 import { qemuTask } from "./qemu-task.ts";
 import { attributesOf, guardUpdate } from "./qemu-spec.ts";
 import { validateDiskSizes } from "./qemu-size.ts";
+import { validatePropertyStrings } from "./property-validation.ts";
 
 export const refuseVm = (
   props: VmProps,
@@ -47,6 +48,10 @@ export const validateVm = Effect.fn(function* validateVmEffect(
   const reasons = formRefusals(news);
   if (reasons.length > 0) {
     yield* refuseVm(news, reasons);
+  }
+  yield* validatePropertyStrings("qemu", { ...news });
+  if (olds !== undefined) {
+    yield* validatePropertyStrings("qemu", { ...olds });
   }
   yield* validateDiskSizes(news, olds);
   yield* guardUpdate(news);
