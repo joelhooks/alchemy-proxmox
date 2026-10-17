@@ -32,6 +32,14 @@ Alchemy beta.83 native adoption replaces all copied `src/ownership/*` helpers an
 
 The copied generated constraint tables and their index were removed. They had no generator or no-diff gate in this repository. `constraint-guard.ts` now carries a deliberately partial, handwritten set of guards for the supported endpoint keys, adapted from the published homeflare guards. It checks only the listed integer bounds, required create/resize fields, resize slots, VM nameserver format and root-only VM writes. It is not a complete PVE schema. The SDK and server still validate the full request. Unused generic value helpers were also cut; retained helpers preserve their port attribution. Tag normalization now deduplicates after case-folding, covered by a parser assertion, so case variants do not manufacture tag drift.
 
+### Post-create tagging and pool permissions
+
+Creation now sends no tags in the guest POST. After the create task completes and pool membership exists, the provider reads the config digest, stamps desired user and ownership tags with a guarded config PUT, then verifies the tag set and ownership marker before returning output. `OwnershipTagStampFailed` names the VMID and retains the cause if this phase fails. It leaves the guest intact.
+
+The source permission check explains this ordering: LXC's config permission checker delegates tags to `assert_tag_permissions`, which checks `VM.Config.Options` on the VM path without a prospective pool argument. QEMU also checks tags before adding pool membership. References: [pve-container](https://git.proxmox.com/?p=pve-container.git;a=blob;f=src/PVE/LXC.pm;hb=7cc33f73778067a4b0deaf4443d8b4b2273afe36), [GuestHelpers](https://git.proxmox.com/?p=pve-guest-common.git;a=blob;f=src/PVE/GuestHelpers.pm;hb=191c23e385e5dbed1938b2d1d322196831ef9331) and [QEMU create](https://git.proxmox.com/?p=qemu-server.git;a=blob;f=src/PVE/API2/Qemu.pm;hb=83b8f9cd3cdb9a3fbea87a7a4b81ffa90482e4c8). These public source revisions explain the observed failure; they are not a claim about the exact deployed revision. The fix does not request broader ACLs.
+
+A crash or tag failure after creation can leave an untagged guest with no recorded output. `AGENTS.md` documents this known gap and the need for inspection and explicit adoption, not inferred ownership or automatic deletion. Adoption itself still never stamps tags.
+
 ### Measured behavior retained in live tests
 
 `test/lifecycle.test.ts` names its Effect test `lifecycle; exact and mismatched adoption; second-plan noop; missing guest refusal`. It retains and extends these homeflare behaviors on one throwaway LXC:
@@ -59,6 +67,7 @@ This package pins Effect `4.0.5` in both peer and development dependencies. The 
 
 - Local gates passed: `pnpm install`; `pnpm check` (Effect/TypeScript, oxfmt, type-aware oxlint); `PROXMOX_LIVE=0 pnpm test` (4 parser tests and 1 credential-free platform smoke test passed, 1 real-PVE test explicitly skipped).
 - The owner's live attempt on `a2b46bd` stopped before any PVE call because Alchemy could not load its optional Node platform peer. The follow-up adds exact `@effect/platform-node` `4.0.5` as a development dependency and an unconditional `test/platform.test.ts` that resolves NodeServices/NodeSocket, then builds Alchemy's actual PlatformServices layer. Resolving the modules first makes a missing peer fail normally instead of reaching Alchemy's `process.exit` fallback.
+- The owner's rerun on `cabeba7` passed the original lifecycle and every adoption case against real PVE. Managed creation then failed the tag permission check before starting a create task. The post-create tagging change above addresses that failure for LXC and VM; the test's existing pooled `operator-note` update is unchanged.
 - Follow-up live result: **pending owner rerun**. This worker does not have authorization to run the live PVE suite. Record the owner's result here after that run.
 
 ## Reference mirrors

@@ -1,7 +1,22 @@
 import { createHash } from "node:crypto";
 import { AdoptPolicy, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
+import * as Data from "effect/Data";
 import * as Option from "effect/Option";
+
+export class OwnershipTagStampFailed extends Data.TaggedError("OwnershipTagStampFailed")<{
+  readonly node: string;
+  readonly vmid: number;
+  readonly cause: unknown;
+}> {
+  readonly keys = ["tags"] as const;
+  readonly reasons = [
+    "Guest creation completed, but ownership tags could not be confirmed. Inspect the guest and explicitly adopt if needed; nothing was deleted.",
+  ] as const;
+  override get message() {
+    return `Guest ${String(this.vmid)}: ${this.reasons.join(" ")}`;
+  }
+}
 
 export const ownershipTag = (fqn: string): string =>
   `alchemy-${createHash("sha256").update(fqn).digest("hex")}`;

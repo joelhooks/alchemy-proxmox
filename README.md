@@ -37,6 +37,7 @@ The token needs the privileges required by the declared operations, including ac
 ## Guest rules
 
 - Unowned guests require Alchemy's native `adopt(true)` or `--adopt` and an exact match for declared config keys. Adoption writes nothing, including tags. A mismatch names keys, not values.
+- Creation first makes an untagged guest in its pool, then stamps desired user tags and an ownership tag with a digest-guarded config PUT and verifies a fresh read before returning output. `OwnershipTagStampFailed` names the VMID if stamping or readback fails; it never deletes the guest. A crash before stamping can leave an unrecorded, tagless guest that needs operator inspection and explicit adoption.
 - New guests receive an ownership tag derived from the resource FQN. Recorded output or that tag establishes ownership. `list()` discovers tagged guests; tagless adopted guests remain in state but do not appear in discovery. Omitted user tags stay unmanaged.
 - Omitted config keys are unmanaged. Wire names follow PVE (`rootfs`, `mp0`, `scsi0`, `net0`, `ipconfig0`). The exported props describe the supported fields.
 - Both resources retain by default. Opt in through Alchemy's removal policy to delete. Deletion refuses a guest that differs from its last declaration. It never stops a running guest or forces deletion.

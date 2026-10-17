@@ -14,7 +14,10 @@ import type { LxcAttributes, LxcProps } from "./lxc-props.ts";
 import type { PveRequirements } from "./resource.ts";
 import { guardForm } from "./constraint-guard.ts";
 import { requireRecreation } from "./missing-guest.ts";
-import { hasTag, requireOwnership, withTag } from "./ownership.ts";
+import { hasTag, requireOwnership, withTag, OwnershipTagStampFailed } from "./ownership.ts";
+import * as nodes from "@distilled.cloud/proxmox/nodes";
+import { runPve } from "./distilled-pve.ts";
+import { tagSet } from "./lxc-wire.ts";
 import { text } from "./values.ts";
 import { taggedGuests } from "./discovery.ts";
 
@@ -50,6 +53,41 @@ const checkAdoption = Effect.fn(function* checkAdoptionEffect(
     );
   }
 });
+
+// Created -> read digest -> stamp tags -> verify -> record output. Failure leaves the guest intact.
+const stampCreatedOwnership = (props: LxcProps, fqn: string) =>
+  Effect.gen(function* stampCreatedOwnershipEffect() {
+    const created = yield* readLive(props);
+    if (created === undefined) {
+      return yield* refuse(props, ["Created guest is absent before ownership tagging."], ["tags"]);
+    }
+    const tagged = withTag({ ...props, tags: props.tags ?? text(created.tags) }, fqn);
+    yield* runPve(
+      nodes.putNodeLxcConfig({
+        digest: text(created.digest),
+        node: props.node,
+        tags: text(tagged.tags),
+        vmid: String(props.vmid),
+      }),
+    );
+    const confirmed = yield* readLive(props);
+    if (
+      confirmed === undefined ||
+      !hasTag(fqn, text(confirmed.tags)) ||
+      tagSet(text(confirmed.tags)) !== tagSet(text(tagged.tags))
+    ) {
+      return yield* refuse(
+        props,
+        ["Ownership tag write was not confirmed by a fresh read."],
+        ["tags"],
+      );
+    }
+    return tagged;
+  }).pipe(
+    Effect.mapError(
+      (cause) => new OwnershipTagStampFailed({ cause, node: props.node, vmid: props.vmid }),
+    ),
+  );
 
 export const LxcProvider = () =>
   Provider.succeed(Lxc, {
@@ -132,9 +170,11 @@ export const LxcProvider = () =>
         if (output !== undefined || olds !== undefined) {
           yield* requireRecreation(news);
         }
-        declared = withTag(news, fqn);
-        yield* createGuard(declared);
-        yield* createGuest(declared);
+        // Pool-scoped tag permission is available only after the create task adds membership.
+        const untagged = { ...news, tags: undefined };
+        yield* createGuard(untagged);
+        yield* createGuest(untagged);
+        declared = yield* stampCreatedOwnership(news, fqn);
       } else {
         const tagged = hasTag(fqn, text(live.tags));
         yield* requireOwnership(fqn, "Proxmox.Lxc", output !== undefined || tagged);

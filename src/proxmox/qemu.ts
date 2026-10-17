@@ -18,7 +18,8 @@ import { checkLiveDiskSizes } from "./qemu-size.ts";
 import { resizeDisks } from "./qemu-resize.ts";
 import { runPve } from "./distilled-pve.ts";
 import { requireRecreation } from "./missing-guest.ts";
-import { hasTag, requireOwnership, withTag } from "./ownership.ts";
+import { hasTag, requireOwnership, withTag, OwnershipTagStampFailed } from "./ownership.ts";
+import { tagSet } from "./lxc-wire.ts";
 
 export type { VmAttributes, VmProps } from "./qemu-props.ts";
 
@@ -29,6 +30,45 @@ const effective = (props: VmProps, fqn: string, live: VmAttributes): VmProps =>
   hasTag(fqn, live.config.tags)
     ? withTag({ ...props, tags: props.tags ?? live.config.tags }, fqn)
     : props;
+
+// Created -> read digest -> stamp tags -> verify -> record output. Failure leaves the guest intact.
+const stampCreatedOwnership = (props: VmProps, fqn: string) =>
+  Effect.gen(function* stampCreatedOwnershipEffect() {
+    const created = yield* readQemu(props);
+    if (created === undefined) {
+      return yield* refuseVm(
+        props,
+        ["Created guest is absent before ownership tagging."],
+        ["tags"],
+      );
+    }
+    const tagged = withTag({ ...props, tags: props.tags ?? created.config.tags }, fqn);
+    yield* runPve(
+      nodes.putNodeQemuConfig({
+        digest: created.digest,
+        node: props.node,
+        tags: tagged.tags,
+        vmid: String(props.vmid),
+      }),
+    );
+    const confirmed = yield* readQemu(props);
+    if (
+      confirmed === undefined ||
+      !hasTag(fqn, confirmed.config.tags) ||
+      tagSet(confirmed.config.tags ?? "") !== tagSet(tagged.tags ?? "")
+    ) {
+      return yield* refuseVm(
+        props,
+        ["Ownership tag write was not confirmed by a fresh read."],
+        ["tags"],
+      );
+    }
+    return tagged;
+  }).pipe(
+    Effect.mapError(
+      (cause) => new OwnershipTagStampFailed({ cause, node: props.node, vmid: props.vmid }),
+    ),
+  );
 
 export const VmProvider = () =>
   Provider.succeed(Vm, {
@@ -89,14 +129,16 @@ export const VmProvider = () =>
         if (output !== undefined || olds !== undefined) {
           yield* requireRecreation(news);
         }
-        declared = withTag(news, fqn);
-        yield* guardCreate(declared, true);
+        // Pool-scoped tag permission is available only after the create task adds membership.
+        const untagged = { ...news, tags: undefined };
+        yield* guardCreate(untagged, true);
         yield* qemuTask(
-          news,
-          nodes.createNodeQemu({ ...createForm(declared), node: news.node }),
+          untagged,
+          nodes.createNodeQemu({ ...createForm(untagged), node: news.node }),
           "create VM",
           180,
         );
+        declared = yield* stampCreatedOwnership(news, fqn);
       } else {
         const tagged = hasTag(fqn, live.config.tags);
         yield* requireOwnership(fqn, "Proxmox.Vm", output !== undefined || tagged);
