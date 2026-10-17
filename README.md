@@ -37,6 +37,10 @@ export default Alchemy.Stack(
 
 This package ships ESM JavaScript and TypeScript declarations in `dist/`. Git dependency installs build them through `prepare`. Consumers do not need a TypeScript loader or special TypeScript-extension settings. `pnpm check` builds the package and typechecks the example above and a VM companion in `test/consumer-stack.ts` through the public declarations, with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` enabled. `pnpm test` also builds first and checks both exports and the consumer stack module in plain Node without credentials or a TypeScript loader.
 
+For git dependencies, keep `prepare` enabled: it creates the JavaScript and declarations before packaging. In a pnpm consumer, review and approve the dependency's build through [`allowBuilds`](https://pnpm.io/settings/build#allowbuilds). Use the exact resolved git or tarball artifact entry reported by pnpm, including its commit, rather than guessing a package-name-only approval. Do not enable all dependency scripts to bypass approval.
+
+Pin the dependency to the full commit SHA of a reviewed release tag, not a floating branch or tag, and commit the resulting lockfile.
+
 ## Credentials
 
 Set `PROXMOX_URL`, `PROXMOX_TOKEN_ID` and `PROXMOX_TOKEN_SECRET`. The SDK normalizes the URL to the `/api2/json` API root. The URL includes any required port. Use a trusted certificate; this package does not disable TLS verification.
@@ -51,7 +55,7 @@ The token needs the privileges required by the declared operations, including ac
 - Creation first makes an untagged guest in its pool, then stamps desired user tags and an ownership tag with a digest-guarded config PUT and verifies a fresh read before returning output. `OwnershipTagStampFailed` names the VMID if stamping or readback fails; it never deletes the guest. A crash before stamping can leave an unrecorded, tagless guest that needs operator inspection and explicit adoption.
 - New guests receive an ownership tag derived from the resource FQN. Recorded output or that tag establishes ownership. `list()` discovers tagged guests; tagless adopted guests remain in state but do not appear in discovery. Omitted user tags stay unmanaged.
 - Omitted config keys are unmanaged. Wire names follow PVE (`rootfs`, `mp0`, `scsi0`, `net0`, `ipconfig0`). The exported props describe the supported fields.
-- Property strings compare parsed fields using the pinned PVE format definitions: default subkeys, aliases and subkey order normalize without dropping extra fields. VM `agent` accepts a flag or a string: `agent: 1` matches `enabled=1`, while additional subkeys must match an explicit string declaration. Boot device-list order and case-sensitive values remain significant.
+- Property strings compare parsed fields using the pinned PVE format definitions: default subkeys, aliases and subkey order normalize without dropping extra fields. VM `agent` accepts a flag or a string: `agent: 1` matches `enabled=1`, while additional subkeys must match an explicit string declaration. Boot device-list order and case-sensitive values remain significant. Duplicate subkeys fail, including different aliases or shorthand forms that resolve to the same field.
 - Both resources retain by default. Opt in through Alchemy's removal policy to delete. Deletion refuses a guest that differs from its last declaration. It never stops a running guest or forces deletion.
 - Neither resource plans replacement. Identity, template, node, storage and immutable config changes fail rather than replacing a guest. Move guests and volumes by hand.
 - `pool` selects an existing pool at creation. Reads verify declared membership. This package does not create pools or move guests between them.

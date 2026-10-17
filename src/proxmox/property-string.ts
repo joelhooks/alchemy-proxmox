@@ -32,7 +32,14 @@ const canonicalValue = (value: string, kind: FieldKind | undefined): string => {
   return value;
 };
 
-/** Parse API property strings, retaining unknown fields and case-sensitive values. */
+const setUnique = (out: Map<string, string>, key: string, value: string): void => {
+  if (out.has(key)) {
+    throw new Error(`Duplicate property subkey: ${key}`);
+  }
+  out.set(key, value);
+};
+
+/** Parse API property strings, retaining unknown fields and rejecting duplicate subkeys. */
 export const parseProperty = (
   value: string | boolean | number | null | undefined,
   format: PropertyFormat | undefined,
@@ -55,14 +62,14 @@ export const parseProperty = (
     const alias =
       format !== undefined && Object.hasOwn(format.aliases, key) ? format.aliases[key] : undefined;
     if (alias?.keyAlias !== undefined) {
-      out.set(alias.keyAlias, key);
+      setUnique(out, alias.keyAlias, key);
     }
     const target = alias?.target ?? key;
     const kind =
       format !== undefined && Object.hasOwn(format.fields, target)
         ? format.fields[target]
         : undefined;
-    out.set(target, canonicalValue(raw, kind));
+    setUnique(out, target, canonicalValue(raw, kind));
   }
   return out;
 };

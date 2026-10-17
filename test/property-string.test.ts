@@ -22,6 +22,23 @@ const equivalent = (
 const identity = { node: "", vmid: 0 };
 
 describe("schema-driven PVE property strings", () => {
+  it.each([
+    ["qemu", "agent", "enabled=1,enabled=1"],
+    ["qemu", "agent", "enabled=1,enabled=0"],
+    ["qemu", "agent", "1,enabled=1"],
+    ["qemu", "agent", "freeze-fs=1,guest-fsfreeze=1"],
+    ["qemu", "agent", "future-option=a,future-option=b"],
+    ["qemu", "net0", "model=virtio,virtio=02:00:00:00:00:0a"],
+    ["qemu", "net0", "virtio=02:00:00:00:00:0a,macaddr=02:00:00:00:00:0a"],
+    ["qemu", "cpu", "host,cputype=host"],
+    ["qemu", "scsi0", "storage:disk-image,volume=storage:disk-image"],
+    ["lxc", "startup", "3,order=3"],
+    ["lxc", "net0", "name=eth0,name=eth0"],
+  ] as const)("rejects duplicate %s %s fields in %s", (guest, key, value) => {
+    expect(() => parseProperty(value, propertyFormat(guest, key))).toThrow(
+      "Duplicate property subkey",
+    );
+  });
   it("treats 1 and enabled=1 as the same agent property", () => {
     expect(equivalent("qemu", "agent", 1, "enabled=1")).toBe(true);
     expect(judgeVm({ ...identity, agent: 1 }, { agent: "enabled=1" }).drift).toEqual([]);

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { requirePveMirror } from "./require-pve-mirror.ts";
 import { readFile, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -101,6 +102,7 @@ const compact = (value: unknown): PropertyFormat => {
 const root = new URL("../", import.meta.url);
 const mirror = new URL(".agent_sources/git.proxmox.com/pve-docs/", root);
 const revision = "b423460d22af888462b3d31dfff374abcfda95fa";
+await requirePveMirror(mirror);
 const actual = execFileSync("git", ["rev-parse", "HEAD"], {
   cwd: mirror,
   encoding: "utf-8",
