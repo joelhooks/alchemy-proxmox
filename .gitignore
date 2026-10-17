@@ -3,3 +3,5 @@ dist/
 .alchemy/
 .env*
 .scratch/
+.agent_sources/
+.agent-sources/
