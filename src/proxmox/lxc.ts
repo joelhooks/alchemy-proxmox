@@ -133,6 +133,7 @@ export const LxcProvider = () =>
             return config === undefined ? undefined : attributesOf(guest, config);
           }),
         ),
+        { concurrency: 4 },
       );
       return found.filter((guest) => guest !== undefined);
     }),

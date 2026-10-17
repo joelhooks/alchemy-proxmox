@@ -14,7 +14,7 @@ export class OwnershipTagStampFailed extends Data.TaggedError("OwnershipTagStamp
     "Guest creation completed, but ownership tags could not be confirmed. Inspect the guest and explicitly adopt if needed; nothing was deleted.",
   ] as const;
   override get message() {
-    return `Guest ${String(this.vmid)}: ${this.reasons.join(" ")}`;
+    return `Guest ${String(this.vmid)}: ${this.reasons.join(" ")} After inspection, re-plan with adoption enabled (adopt: true or --adopt) for VMID ${String(this.vmid)}; declared config must match exactly.`;
   }
 }
 

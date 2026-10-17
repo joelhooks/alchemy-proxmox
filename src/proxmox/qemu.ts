@@ -101,7 +101,10 @@ export const VmProvider = () =>
     }),
     list: Effect.fn(function* listEffect() {
       const guests = yield* taggedGuests("qemu");
-      const found = yield* Effect.all(guests.map((guest) => readQemu(guest)));
+      const found = yield* Effect.all(
+        guests.map((guest) => readQemu(guest)),
+        { concurrency: 4 },
+      );
       return found.filter((guest) => guest !== undefined);
     }),
     read: Effect.fn(function* readEffect({ fqn, olds, output }) {
