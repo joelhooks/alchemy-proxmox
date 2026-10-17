@@ -92,7 +92,7 @@ export const validateDiskSizes = (props: VmProps, olds?: VmProps) =>
       ) {
         reason = "the target must be a positive, safely representable integer GiB size";
       } else if (
-        value.split(",")[0]?.endsWith(":cloudinit") ||
+        value.split(",")[0]?.endsWith(":cloudinit") === true ||
         parseDisk(value).options.get("media") === "cdrom"
       ) {
         reason = "cloud-init and CD-ROM drives cannot be resized";

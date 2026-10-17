@@ -7,24 +7,35 @@ import * as Alchemy from "alchemy";
 import * as Proxmox from "alchemy-proxmox";
 import * as Effect from "effect/Effect";
 
+const env = (name: string): string => {
+  const value = process.env[name];
+  if (value === undefined || value === "") {
+    throw new Error(`Set ${name}`);
+  }
+  return value;
+};
+
 export default Alchemy.Stack(
   "Guests",
   { providers: Proxmox.providers(), state: Alchemy.localState() },
-  Effect.gen(function* () {
+  Effect.gen(function* guestStack() {
+    const pool = process.env.PROXMOX_POOL;
     const container = yield* Proxmox.Lxc("Container", {
-      node: process.env.PROXMOX_NODE!,
-      vmid: Number(process.env.PROXMOX_VMID),
-      pool: process.env.PROXMOX_POOL,
-      ostemplate: process.env.PROXMOX_TEMPLATE!,
-      rootfs: `${process.env.PROXMOX_STORAGE}:4`,
-      net0: `name=eth0,bridge=${process.env.PROXMOX_BRIDGE},ip=dhcp`,
-      unprivileged: 1,
       memory: 512,
+      net0: `name=eth0,bridge=${env("PROXMOX_BRIDGE")},ip=dhcp`,
+      node: env("PROXMOX_NODE"),
+      ostemplate: env("PROXMOX_TEMPLATE"),
+      ...(pool === undefined ? {} : { pool }),
+      rootfs: `${env("PROXMOX_STORAGE")}:4`,
+      unprivileged: 1,
+      vmid: Number(env("PROXMOX_VMID")),
     });
     return { container };
   }),
 );
 ```
+
+This package exports TypeScript source. Consumers need `allowImportingTsExtensions: true` in their tsconfig, with `noEmit: true` for typechecking. `pnpm check` typechecks the example above and a VM companion in `test/consumer-stack.ts` with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` enabled.
 
 ## Credentials
 

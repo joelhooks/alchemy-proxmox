@@ -11,7 +11,7 @@ import { identityRefusals } from "./lxc-identity.ts";
 import { judge } from "./lxc-judge.ts";
 import { attributesOf, createGuest, destroyGuest, readLive, updateGuest } from "./lxc-lifecycle.ts";
 import type { LxcAttributes, LxcProps } from "./lxc-props.ts";
-import type { PveRequirements } from "./resource.ts";
+import type { Providers } from "../providers.ts";
 import { guardForm } from "./constraint-guard.ts";
 import { requireRecreation } from "./missing-guest.ts";
 import { hasTag, requireOwnership, withTag, OwnershipTagStampFailed } from "./ownership.ts";
@@ -24,7 +24,7 @@ import { taggedGuests } from "./discovery.ts";
 export type { LxcAttributes, LxcProps } from "./lxc-props.ts";
 
 // oxlint-disable-next-line no-redeclare -- Alchemy resources intentionally share a name in TypeScript's type and value namespaces.
-export type Lxc = Resource<"Proxmox.Lxc", LxcProps, LxcAttributes, never, PveRequirements>;
+export type Lxc = Resource<"Proxmox.Lxc", LxcProps, LxcAttributes, never, Providers>;
 export const Lxc = Resource<Lxc>("Proxmox.Lxc", { defaultRemovalPolicy: "retain" });
 
 const refuse = (props: LxcProps, reasons: readonly string[], keys: readonly string[] = []) =>
@@ -172,7 +172,8 @@ export const LxcProvider = () =>
           yield* requireRecreation(news);
         }
         // Pool-scoped tag permission is available only after the create task adds membership.
-        const untagged = { ...news, tags: undefined };
+        const untagged = { ...news };
+        delete untagged.tags;
         yield* createGuard(untagged);
         yield* createGuest(untagged);
         declared = yield* stampCreatedOwnership(news, fqn);

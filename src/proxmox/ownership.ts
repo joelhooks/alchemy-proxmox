@@ -22,7 +22,10 @@ export const ownershipTag = (fqn: string): string =>
   `alchemy-${createHash("sha256").update(fqn).digest("hex")}`;
 export const hasTag = (fqn: string, tags: string | undefined): boolean =>
   (tags ?? "").split(";").includes(ownershipTag(fqn));
-export const withTag = <P extends { tags?: string }>(props: P, fqn: string): P => ({
+export const withTag = <P extends { tags?: string }>(
+  props: P,
+  fqn: string,
+): Omit<P, "tags"> & { tags: string } => ({
   ...props,
   tags: [...new Set([...(props.tags ?? "").split(";").filter(Boolean), ownershipTag(fqn)])]
     .toSorted()

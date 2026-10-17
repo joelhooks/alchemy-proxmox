@@ -6,7 +6,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import * as nodes from "@distilled.cloud/proxmox/nodes";
 import * as Effect from "effect/Effect";
-import type { PveRequirements } from "./resource.ts";
+import type { Providers } from "../providers.ts";
 import type { VmAttributes, VmProps } from "./qemu-props.ts";
 import { checkVmAdoption, deleteQemu, readQemu, refuseVm, validateVm } from "./qemu-lifecycle.ts";
 import { createForm } from "./qemu-form.ts";
@@ -24,11 +24,11 @@ import { tagSet } from "./lxc-wire.ts";
 export type { VmAttributes, VmProps } from "./qemu-props.ts";
 
 // oxlint-disable-next-line no-redeclare -- Alchemy resources intentionally share a name in TypeScript's type and value namespaces.
-export type Vm = Resource<"Proxmox.Vm", VmProps, VmAttributes, never, PveRequirements>;
+export type Vm = Resource<"Proxmox.Vm", VmProps, VmAttributes, never, Providers>;
 export const Vm = Resource<Vm>("Proxmox.Vm", { defaultRemovalPolicy: "retain" });
 const effective = (props: VmProps, fqn: string, live: VmAttributes): VmProps =>
   hasTag(fqn, live.config.tags)
-    ? withTag({ ...props, tags: props.tags ?? live.config.tags }, fqn)
+    ? withTag({ ...props, tags: props.tags ?? live.config.tags ?? "" }, fqn)
     : props;
 
 // Created -> read digest -> stamp tags -> verify -> record output. Failure leaves the guest intact.
@@ -42,7 +42,7 @@ const stampCreatedOwnership = (props: VmProps, fqn: string) =>
         ["tags"],
       );
     }
-    const tagged = withTag({ ...props, tags: props.tags ?? created.config.tags }, fqn);
+    const tagged = withTag({ ...props, tags: props.tags ?? created.config.tags ?? "" }, fqn);
     yield* runPve(
       nodes.putNodeQemuConfig({
         digest: created.digest,
@@ -133,7 +133,8 @@ export const VmProvider = () =>
           yield* requireRecreation(news);
         }
         // Pool-scoped tag permission is available only after the create task adds membership.
-        const untagged = { ...news, tags: undefined };
+        const untagged = { ...news };
+        delete untagged.tags;
         yield* guardCreate(untagged, true);
         yield* qemuTask(
           untagged,
