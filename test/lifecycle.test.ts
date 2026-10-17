@@ -50,6 +50,8 @@ it.skipIf(!enabled)(
       rootfs: `${env("PROXMOX_STORAGE")}:4`,
       net0: `name=eth0,bridge=${env("PROXMOX_BRIDGE")},ip=dhcp`,
       unprivileged: 1,
+      // Current systemd templates warn at create without nesting, and a task with warnings fails.
+      features: "nesting=1",
       start: 0,
       onboot: 0,
       memory: 256,
