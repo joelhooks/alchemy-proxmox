@@ -4,7 +4,7 @@
   "description": "Proxmox VE resources for Alchemy",
   "license": "MIT",
   "files": [
-    "src",
+    "dist",
     "README.md",
     "PROVENANCE.md",
     "LICENSE",
@@ -12,15 +12,23 @@
   ],
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./Credentials": "./src/credentials.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./Credentials": {
+      "types": "./dist/credentials.d.ts",
+      "import": "./dist/credentials.js"
+    }
   },
   "scripts": {
     "vendor:agent-sources": "bash scripts/vendor-agent-sources.sh",
-    "typecheck": "effect-tsgo patch && tsc --noEmit -p tsconfig.json",
+    "build": "effect-tsgo patch && tsc -p tsconfig.build.json",
+    "prepare": "pnpm run build",
+    "typecheck": "pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json",
     "format": "oxfmt --write src test *.ts *.json AGENTS.md README.md PROVENANCE.md pnpm-workspace.yaml",
     "check": "pnpm typecheck && oxfmt --check src test *.ts *.json AGENTS.md README.md PROVENANCE.md pnpm-workspace.yaml && oxlint --type-aware",
-    "test": "ALCHEMY_TELEMETRY_DISABLED=1 vitest run"
+    "test": "pnpm build && ALCHEMY_TELEMETRY_DISABLED=1 vitest run"
   },
   "dependencies": {
     "@distilled.cloud/proxmox": "npm:@homeflare/distilled-proxmox@0.3.5"

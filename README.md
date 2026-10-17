@@ -35,7 +35,7 @@ export default Alchemy.Stack(
 );
 ```
 
-This package exports TypeScript source. Consumers need `allowImportingTsExtensions: true` in their tsconfig, with `noEmit: true` for typechecking. `pnpm check` typechecks the example above and a VM companion in `test/consumer-stack.ts` with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` enabled.
+This package ships ESM JavaScript and TypeScript declarations in `dist/`. Git dependency installs build them through `prepare`. Consumers do not need a TypeScript loader or special TypeScript-extension settings. `pnpm check` builds the package and typechecks the example above and a VM companion in `test/consumer-stack.ts` through the public declarations, with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` enabled. `pnpm test` also builds first and checks both exports and the consumer stack module in plain Node without credentials or a TypeScript loader.
 
 ## Credentials
 
