@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { AdoptPolicy } from "alchemy/AdoptPolicy";
-import { scratchStack, toEffect } from "alchemy/Test/Core";
+import { scratchStack, toEffect } from "@alchemy.run/test/Core";
 import * as nodes from "@distilled.cloud/proxmox/nodes";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
